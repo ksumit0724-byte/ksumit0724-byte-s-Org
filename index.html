@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Aether OS | Neural Dashboard</title>
+    <script>
+      // Early suppression of benign environment-specific errors
+      window.addEventListener('unhandledrejection', (event) => {
+        if (event.reason?.message?.includes('WebSocket') || event.reason?.message?.includes('vite')) {
+          event.stopImmediatePropagation();
+          event.preventDefault();
+        }
+      });
+      // Monkey-patch console.error to hide persistent WebSocket warnings
+      const _e = console.error;
+      console.error = (...args) => {
+        if (args[0]?.includes?.('[vite]') || args[0]?.includes?.('WebSocket')) return;
+        _e.apply(console, args);
+      };
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

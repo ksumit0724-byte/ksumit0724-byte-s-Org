@@ -1,0 +1,12 @@
+{
+  "name": "Remix: Aether OS",
+  "description": "A futuristic personal productivity operating system with dual-mode cognitive and physical optimization.",
+  "requestFramePermissions": [
+    "notifications"
+  ],
+  "majorCapabilities": [
+    "Google Calendar Sync",
+    "Neural Analytics",
+    "Dual-Mode HUD"
+  ]
+}
