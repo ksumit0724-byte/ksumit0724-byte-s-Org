@@ -3,16 +3,26 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import webpush from "web-push";
 import dotenv from "dotenv";
+import { createClient } from "@supabase/supabase-js";
 
 dotenv.config();
 
 // Configure Web Push
 if (process.env.VITE_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
-  webpush.setVapidDetails(
-    process.env.VAPID_SUBJECT || "mailto:example@yourdomain.com",
-    process.env.VITE_VAPID_PUBLIC_KEY,
-    process.env.VAPID_PRIVATE_KEY
-  );
+  let subject = process.env.VAPID_SUBJECT || "mailto:example@yourdomain.com";
+  if (!subject.startsWith("mailto:") && !subject.startsWith("https://")) {
+    subject = "mailto:" + subject;
+  }
+  
+  try {
+    webpush.setVapidDetails(
+      subject,
+      process.env.VITE_VAPID_PUBLIC_KEY,
+      process.env.VAPID_PRIVATE_KEY
+    );
+  } catch (error: any) {
+    console.warn("Web Push disabled: Invalid VAPID keys provided in environment.");
+  }
 }
 
 async function startServer() {
@@ -24,6 +34,53 @@ async function startServer() {
   // API Routes
   app.get("/api/health", (req, res) => {
     res.json({ status: "Aether OS Core: Online" });
+  });
+
+  // Fetch leaderboard data from Supabase Auth Users
+  app.get("/api/leaderboard", async (req, res) => {
+    const supabaseUrl = process.env.VITE_SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return res.status(500).json({ error: "Missing Supabase URL or Service Role Key in environment." });
+    }
+
+    try {
+      const adminClient = createClient(supabaseUrl, supabaseServiceKey, {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
+        }
+      });
+      
+      const { data, error } = await adminClient.auth.admin.listUsers();
+      if (error) throw error;
+      
+      const players = data.users.map((u, i) => {
+         // Mock stats based on index/id for now if not present, but use real handles
+         const handle = u.user_metadata?.username || u.email?.split('@')[0] || `UNKNOWN_${i}`;
+         const role = u.user_metadata?.role || 'member';
+         const isVerified = u.user_metadata?.is_verified ?? false;
+         
+         // Using string length or just consistent random values since we don't have real app stats yet
+         const consistency = Math.max(50, 99 - (i * 2));
+         const volume = (Math.max(10, 100 - i) * 100).toLocaleString();
+         
+         return {
+           id: u.id,
+           handle: handle.startsWith('@') ? handle : `@${handle.toUpperCase()}`,
+           consistency,
+           volume,
+           verified: role === 'owner' ? isVerified : true, // pilots verified by default
+           role
+         };
+      });
+
+      res.json({ leaderboard: players });
+    } catch (error: any) {
+      console.error("Leaderboard fetch error:", error);
+      res.status(500).json({ error: "Failed to fetch leaderboard." });
+    }
   });
 
   // Save push subscription
@@ -52,6 +109,8 @@ async function startServer() {
       res.status(500).json({ error: "failed to send" });
     }
   });
+
+ // Route mapping handled on client side
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {

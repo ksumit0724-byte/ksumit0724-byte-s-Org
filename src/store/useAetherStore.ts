@@ -2,33 +2,48 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 export type AppMode = 'titan' | 'zenith';
+export type AppTheme = 'dark' | 'light';
 
 export interface AetherTask {
   id: string;
   type: 'work' | 'workout';
+  mode: AppMode;
   title: string;
   category: string;
   startTime: number; // Timestamp
   intensity?: number; // 0-100
+  reminderOffset?: number; // minutes before start time
+  reminderSent?: boolean;
   createdAt: number;
+}
+
+export interface AetherNotification {
+  id: string;
+  title: string;
+  message: string;
+  type: 'reminder' | 'system';
+  timestamp: number;
 }
 
 interface AetherState {
   mode: AppMode;
+  theme: AppTheme;
   user: any | null;
   session: any | null;
   tasks: AetherTask[];
-  notifications: any[];
+  notifications: AetherNotification[];
   targetedMuscles: string[];
   isDemoMode: boolean;
   setMode: (mode: AppMode) => void;
+  setTheme: (theme: AppTheme) => void;
   setUser: (user: any) => void;
   setSession: (session: any) => void;
   setDemoMode: (isDemo: boolean) => void;
   addTask: (task: Omit<AetherTask, 'id' | 'createdAt'>) => void;
   updateTask: (id: string, updates: Partial<AetherTask>) => void;
   deleteTask: (id: string) => void;
-  addNotification: (notif: any) => void;
+  addNotification: (notif: Omit<AetherNotification, 'id' | 'timestamp'>) => void;
+  removeNotification: (id: string) => void;
   toggleMuscle: (muscle: string) => void;
   updateUser: (updates: any) => void;
 }
@@ -37,6 +52,7 @@ export const useAetherStore = create<AetherState>()(
   persist(
     (set) => ({
       mode: 'zenith',
+      theme: 'dark',
       user: null,
       session: null,
       tasks: [],
@@ -44,6 +60,7 @@ export const useAetherStore = create<AetherState>()(
       targetedMuscles: [],
       isDemoMode: false,
       setMode: (mode) => set({ mode }),
+      setTheme: (theme) => set({ theme }),
       setUser: (user) => set({ user }),
       setSession: (session) => set({ session }),
       setDemoMode: (isDemoMode) => set({ isDemoMode }),
@@ -77,7 +94,10 @@ export const useAetherStore = create<AetherState>()(
         return { user: newUser, session: newSession };
       }),
       addNotification: (notif) => set((state) => ({ 
-        notifications: [notif, ...state.notifications].slice(0, 5) 
+        notifications: [{ ...notif, id: Math.random().toString(36).substr(2, 9), timestamp: Date.now() }, ...state.notifications].slice(0, 5) 
+      })),
+      removeNotification: (id) => set((state) => ({
+        notifications: state.notifications.filter(n => n.id !== id)
       })),
       toggleMuscle: (muscle) => set((state) => ({
         targetedMuscles: state.targetedMuscles.includes(muscle)
@@ -89,6 +109,7 @@ export const useAetherStore = create<AetherState>()(
       name: 'aether-os-storage',
       partialize: (state) => ({ 
         mode: state.mode, 
+        theme: state.theme,
         targetedMuscles: state.targetedMuscles,
         notifications: state.notifications,
         tasks: state.tasks,

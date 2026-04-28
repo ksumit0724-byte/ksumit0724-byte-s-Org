@@ -10,7 +10,7 @@ export function InhibitorWidget({ mode }: { mode: AppMode }) {
   const accent = isTitan ? "purple-neon" : "cyan-neon";
 
   return (
-    <div className="flex flex-col justify-between p-6 bg-black/30 rounded-2xl border border-white/5">
+    <div className="flex flex-col justify-between p-4 bg-black/30 rounded-2xl border border-white/5">
       <div>
         <h4 className="text-[10px] text-white/30 uppercase tracking-[0.2em] mb-4 font-mono">{label}</h4>
         

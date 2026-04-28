@@ -6,147 +6,93 @@ import {
   Dumbbell, 
   Plus, 
   MoreHorizontal,
-  User,
-  Settings,
-  LogOut,
-  UserPlus,
-  LogIn
+  Trophy,
+  ShoppingBag
 } from 'lucide-react';
 import { useAetherStore } from '../store/useAetherStore';
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuLabel, 
-  DropdownMenuSeparator, 
-  DropdownMenuTrigger 
-} from "./ui/dropdown-menu";
-import { authService } from "../lib/supabase";
 
 interface GlobalNavbarProps {
   onAddClick: () => void;
   onHomeClick: () => void;
+  onSettingsClick: () => void;
+  currentView: 'dashboard' | 'leaderboard' | 'store';
+  setCurrentView: (view: 'dashboard' | 'leaderboard' | 'store') => void;
 }
 
-export const GlobalNavbar: React.FC<GlobalNavbarProps> = ({ onAddClick, onHomeClick }) => {
-  const { mode, setMode, session, setUser, setSession, setDemoMode } = useAetherStore();
-
-  const handleLogout = async () => {
-    try {
-      await authService.signOut();
-    } catch (e) {
-      // Ignore
-    }
-    setDemoMode(false);
-    setUser(null);
-    setSession(null);
-    window.location.reload();
-  };
-
+export const GlobalNavbar: React.FC<GlobalNavbarProps> = ({ 
+  onAddClick, 
+  onHomeClick, 
+  onSettingsClick,
+  currentView,
+  setCurrentView
+}) => {
+  const { mode, setMode } = useAetherStore();
   const isTitan = mode === 'titan';
   
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-[60] px-4 pb-6 md:px-8 md:pb-8 flex justify-center pointer-events-none">
-      <div className="w-full max-w-2xl bg-black/40 backdrop-blur-3xl border border-white/10 rounded-3xl h-20 md:h-24 flex items-center justify-between px-6 md:px-10 pointer-events-auto shadow-[0_20px_50px_rgba(0,0,0,0.5)] relative overflow-hidden group">
-        {/* Animated Background Glow */}
-        <div className={`absolute inset-0 bg-gradient-to-r ${isTitan ? 'from-purple-neon/5 to-transparent' : 'from-cyan-neon/5 to-transparent'} transition-all duration-700`} />
-        
-        {/* Left Side: Home & Modes */}
-        <div className="flex items-center gap-4 md:gap-8 z-10">
+    <div className="fixed bottom-4 md:bottom-6 left-4 right-4 md:left-1/2 md:-translate-x-1/2 md:w-[600px] z-[40]">
+      <div className="flex items-center gap-3">
+        {/* Left Floating Init_Node Button */}
+        <div className={`filter shrink-0 self-end mb-1 ${isTitan ? 'drop-shadow-[0_4px_10px_rgba(188,19,254,0.5)]' : 'drop-shadow-[0_4px_10px_rgba(0,243,255,0.5)]'}`}>
           <motion.button
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.9 }}
-            onClick={onHomeClick}
-            className="p-3 text-white/40 hover:text-white transition-colors"
+            onClick={onAddClick}
+            className={`w-14 h-14 md:w-16 md:h-16 ${isTitan ? 'bg-gradient-to-tr from-purple-neon to-purple-500' : 'bg-gradient-to-tr from-cyan-neon to-blue-500'} text-white flex items-center justify-center cursor-pointer relative`}
+            style={{
+              clipPath: "polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)",
+            }}
           >
-            <Home size={24} />
+            <Plus className="w-7 h-7 md:w-8 md:h-8 font-light" strokeWidth={1.5} />
           </motion.button>
-          
-          <div className="h-8 w-[1px] bg-white/10" />
-          
-          <div className="flex gap-2">
-            <motion.button
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              onClick={() => setMode('zenith')}
-              className={`p-3 rounded-2xl transition-all relative ${!isTitan ? 'bg-cyan-neon/10 text-cyan-neon shadow-[0_0_15px_rgba(0,243,255,0.2)] border border-cyan-neon/30' : 'text-white/20'}`}
-            >
-              <Laptop size={24} />
-              {!isTitan && <motion.div layoutId="navbar-glow" className="absolute -inset-1 rounded-2xl bg-cyan-neon/20 blur-md pointer-events-none" />}
-            </motion.button>
-            
-            <motion.button
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              onClick={() => setMode('titan')}
-              className={`p-3 rounded-2xl transition-all relative ${isTitan ? 'bg-purple-neon/10 text-purple-neon shadow-[0_0_15px_rgba(188,19,254,0.2)] border border-purple-neon/30' : 'text-white/20'}`}
-            >
-              <Dumbbell size={24} />
-              {isTitan && <motion.div layoutId="navbar-glow" className="absolute -inset-1 rounded-2xl bg-purple-neon/20 blur-md pointer-events-none" />}
-            </motion.button>
-          </div>
         </div>
 
-        {/* Center: FAB */}
-        <div className="absolute left-1/2 -translate-x-1/2 -top-6 md:-top-10 flex flex-col items-center">
-            <motion.button
-              whileHover={{ scale: 1.1, rotate: 90 }}
-              whileTap={{ scale: 0.9 }}
-              onClick={onAddClick}
-              className={`w-16 h-16 md:w-20 md:h-20 ${isTitan ? 'bg-purple-neon' : 'bg-cyan-neon'} text-black rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(0,243,255,0.3)] transition-all duration-300 relative group/fab`}
-            >
-              <Plus className="w-8 h-8 md:w-10 md:h-10 transition-transform duration-300" />
-              <div className={`absolute -inset-2 rounded-full ${isTitan ? 'bg-purple-neon' : 'bg-cyan-neon'} opacity-20 animate-ping pointer-events-none`} />
-            </motion.button>
-            <div className={`mt-2 text-[8px] font-black uppercase tracking-[0.3em] font-mono ${isTitan ? 'text-purple-neon' : 'text-cyan-neon'} animate-pulse`}>Init_Node</div>
-        </div>
+        {/* Minimalist Navigation Pill */}
+        <div className="flex-1 bg-[#0a0a0a]/90 backdrop-blur-xl border border-white/10 rounded-full h-16 shadow-[0_10px_40px_rgba(0,0,0,0.8)] relative flex items-center justify-around px-4">
+          <div className={`absolute inset-0 rounded-full bg-gradient-to-r ${isTitan ? 'from-purple-neon/5 via-transparent to-purple-neon/5' : 'from-cyan-neon/5 via-transparent to-cyan-neon/5'} transition-all duration-700 pointer-events-none`} />
+          
+          <motion.button
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={() => {
+              onHomeClick();
+              setCurrentView('dashboard');
+            }}
+            className={`p-2 transition-colors cursor-pointer rounded-full flex items-center justify-center relative z-10 ${currentView === 'dashboard' ? 'text-white bg-white/10' : 'text-white/40 hover:text-white'}`}
+            title="Dashboard"
+          >
+            <Home className="w-5 h-5 md:w-6 md:h-6" />
+          </motion.button>
 
-        {/* Right Side: Options Portal */}
-        <div className="flex items-center gap-4 z-10">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <motion.button
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
-                className="p-3 text-white/40 hover:text-white transition-colors rounded-2xl hover:bg-white/5 outline-none flex items-center justify-center"
-              >
-                <MoreHorizontal size={24} />
-              </motion.button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56 bg-obsidian/95 backdrop-blur-2xl border-white/10 text-white p-2 rounded-2xl mb-4" side="top" align="end">
-              <DropdownMenuLabel className="text-[10px] uppercase tracking-widest text-white/40 px-3 py-2 flex items-center justify-between">
-                <span>System Options</span>
-                {session?.user?.email && (
-                  <span className="text-[8px] font-mono opacity-50 truncate max-w-[100px]">{session.user.email}</span>
-                )}
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator className="bg-white/5 mx-2" />
-              
-              <DropdownMenuItem className="p-3 rounded-xl focus:bg-white/10 cursor-pointer group">
-                <User className="mr-2 h-4 w-4 text-white/40 group-hover:text-white transition-colors" />
-                <span className="text-xs">Access Profile</span>
-              </DropdownMenuItem>
-              
-              <DropdownMenuItem className="p-3 rounded-xl focus:bg-white/10 cursor-pointer group">
-                <Settings className="mr-2 h-4 w-4 text-white/40 group-hover:text-white transition-colors" />
-                <span className="text-xs">OS Configuration</span>
-              </DropdownMenuItem>
+          <motion.button
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={() => setCurrentView('leaderboard')}
+            className={`p-2 transition-colors cursor-pointer rounded-full flex items-center justify-center relative z-10 ${currentView === 'leaderboard' ? 'text-[#deff9a] bg-[#deff9a]/10' : 'text-white/40 hover:text-[#deff9a]'}`}
+            title="Leaderboard"
+          >
+            <Trophy className="w-5 h-5 md:w-6 md:h-6" />
+          </motion.button>
 
-              <DropdownMenuSeparator className="bg-white/5 mx-2" />
+          <motion.button
+            onClick={() => setCurrentView('store')}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            className={`p-2 transition-colors rounded-full flex items-center justify-center cursor-pointer relative z-10 ${currentView === 'store' ? 'text-[#deff9a] bg-[#deff9a]/10' : 'text-white/40 hover:text-white'}`}
+            title="Store"
+          >
+            <ShoppingBag className="w-5 h-5 md:w-6 md:h-6" />
+          </motion.button>
 
-              {session ? (
-                <DropdownMenuItem onClick={handleLogout} className="p-3 rounded-xl focus:bg-red-500/10 cursor-pointer text-red-500 font-bold group">
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span className="text-[10px] uppercase tracking-widest">Terminate Session</span>
-                </DropdownMenuItem>
-              ) : (
-                <DropdownMenuItem className="p-3 rounded-xl focus:bg-cyan-neon/10 cursor-pointer text-cyan-neon group">
-                  <LogIn className="mr-2 h-4 w-4" />
-                  <span className="text-[10px] uppercase tracking-widest">Authorize Access</span>
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <motion.button
+            onClick={onSettingsClick}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            className="p-2 text-white/40 hover:text-white transition-colors rounded-full flex items-center justify-center cursor-pointer relative z-10"
+            title="Settings"
+          >
+            <MoreHorizontal className="w-5 h-5 md:w-6 md:h-6" />
+          </motion.button>
         </div>
       </div>
     </div>

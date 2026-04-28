@@ -1,20 +1,46 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+let supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+let supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+// Sanitize keys (remove whitespace and common quoting characters)
+if (supabaseUrl && typeof supabaseUrl === 'string') {
+  supabaseUrl = supabaseUrl.trim().replace(/^["'](.+(?=["']$))["']$/, '$1');
+}
+if (supabaseAnonKey && typeof supabaseAnonKey === 'string') {
+  supabaseAnonKey = supabaseAnonKey.trim().replace(/^["'](.+(?=["']$))["']$/, '$1');
+}
+
+export const isSupabaseConfigured = Boolean(
+  supabaseUrl && 
+  supabaseAnonKey && 
+  supabaseUrl !== 'undefined' && 
+  supabaseAnonKey !== 'undefined' &&
+  supabaseUrl.startsWith('https://')
+);
 
 let supabaseInstance: any = null;
 
 export const getSupabase = () => {
   if (!isSupabaseConfigured) {
-    console.warn("Supabase configuration is missing. Authentication and database features will be disabled.");
+    console.warn("Supabase configuration is missing or invalid. Authentication and database features will be disabled.");
+    console.log("URL:", supabaseUrl);
+    console.log("Key:", supabaseAnonKey ? "PRESENT (length: " + supabaseAnonKey.length + ")" : "MISSING");
     return null;
   }
   
   if (!supabaseInstance) {
-    supabaseInstance = createClient(supabaseUrl!, supabaseAnonKey!);
+    try {
+      supabaseInstance = createClient(supabaseUrl!, supabaseAnonKey!, {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+        }
+      });
+    } catch (e) {
+      console.error("Critical: Failed to initialize Supabase client:", e);
+      return null;
+    }
   }
   return supabaseInstance;
 };
@@ -32,7 +58,30 @@ export const authService = {
       email, 
       password,
       options: {
-        data: metadata
+        data: metadata,
+        emailRedirectTo: window.location.origin,
+      }
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async verifyOtp(email: string, token: string) {
+    const { data, error } = await getClient().auth.verifyOtp({
+      email,
+      token,
+      type: 'signup'
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async resendOtp(email: string) {
+    const { data, error } = await getClient().auth.resend({
+      type: 'signup',
+      email,
+      options: {
+        emailRedirectTo: window.location.origin,
       }
     });
     if (error) throw error;

@@ -1,18 +1,11 @@
-import React from 'react';
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuLabel, 
-  DropdownMenuSeparator, 
-  DropdownMenuTrigger 
-} from "./ui/dropdown-menu";
-import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
+import React, { useState, useEffect } from 'react';
 import { useAetherStore } from "../store/useAetherStore";
-import { authService } from "../lib/supabase";
-import { LogOut, User, CreditCard, Settings, Terminal } from "lucide-react";
+import { getSupabase } from "../lib/supabase";
+import { useAuth } from '../hooks/useAuth';
+import { LogOut, User, Mail, Camera, Save, X, Settings, Shield, Headset, Moon, Sun, Key } from "lucide-react";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
+import { Input } from "./ui/input";
 import { 
   Dialog, 
   DialogContent, 
@@ -21,105 +14,188 @@ import {
   DialogDescription 
 } from "./ui/dialog";
 
-export const UserMenu: React.FC = () => {
-  const { session, setUser, setSession, setDemoMode } = useAetherStore();
-  const [showProfile, setShowProfile] = React.useState(false);
+interface UserSettingsModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, onClose }) => {
+  const { user, isDemoMode, theme, setTheme } = useAetherStore();
+  const { signOut, updateNeuralId } = useAuth();
+  const [isEditing, setIsEditing] = useState(false);
+  const [loading, setLoading] = useState(false);
   
-  if (!session?.user) return null;
+  const [neuralId, setNeuralId] = useState(user?.neural_id || '@AETHER_PILOT_000');
+  const [pilotCode, setPilotCode] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setNeuralId(user?.neural_id || '@AETHER_PILOT_000');
+      
+      // Fetch pilot code if gym_owner
+      if (!isDemoMode && user?.role === 'gym_owner' && user?.id) {
+         const fetchPilotCode = async () => {
+            const client = getSupabase();
+            if(!client) return;
+            const { data } = await client.from('gyms').select('pilot_code').eq('owner_id', user.id).single();
+            if (data) {
+               setPilotCode(data.pilot_code);
+            }
+         };
+         fetchPilotCode();
+      } else if (isDemoMode && user?.role === 'gym_owner') {
+         setPilotCode("DEMO-123");
+      }
+    }
+  }, [isOpen, user, isDemoMode]);
 
   const handleLogout = async () => {
-    try {
-      await authService.signOut();
-    } catch (e) {
-      // Ignore signOut errors if not properly configured
-    }
-    setDemoMode(false);
-    setUser(null);
-    setSession(null);
-    window.location.reload(); // Hard reset for clean slate
+    await signOut();
+    window.location.reload(); 
   };
 
-  const userEmail = session.user.email || 'AETHER_PILOT';
-  const initial = userEmail.charAt(0).toUpperCase();
+  const handleSaveProfile = async () => {
+    setLoading(true);
+    try {
+      await updateNeuralId(neuralId);
+      setIsEditing(false);
+    } catch (error: any) {
+      alert(`[ERROR] ${error?.message || 'Failed to update profile'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const userRole = user?.role || 'pilot';
+  const userEmail = user?.email || 'not_linked@aether.os';
+  const displayAvatar = user?.avatar_url || null;
+  const accessLevel = user?.access_level || 'FREE';
 
   return (
-    <>
-      <DropdownMenu>
-        <DropdownMenuTrigger className="outline-none">
-          <span className="flex items-center gap-3 p-1 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 transition-colors">
-            <Avatar className="h-8 w-8 border border-cyan-neon/30">
-              <AvatarImage src={`https://api.dicebear.com/7.x/shapes/svg?seed=${userEmail}`} />
-              <AvatarFallback className="bg-cyan-neon text-black font-bold text-xs">{initial}</AvatarFallback>
-            </Avatar>
-            <span className="text-[10px] font-mono font-bold tracking-widest text-white/60 pr-2 uppercase">
-              {userEmail.split('@')[0]}
-            </span>
-          </span>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent className="w-56 bg-obsidian/95 backdrop-blur-xl border-white/10 text-white">
-          <DropdownMenuLabel className="text-[10px] uppercase tracking-widest text-white/40">Identity Node</DropdownMenuLabel>
-          <DropdownMenuSeparator className="bg-white/5" />
-          <DropdownMenuItem onClick={() => setShowProfile(true)} className="hover:bg-cyan-neon/10 focus:bg-cyan-neon/10 cursor-pointer">
-            <User className="mr-2 h-4 w-4 text-cyan-neon" />
-            <span className="text-xs">Profile Settings</span>
-          </DropdownMenuItem>
-          <DropdownMenuItem className="hover:bg-cyan-neon/10 focus:bg-cyan-neon/10 cursor-pointer">
-            <CreditCard className="mr-2 h-4 w-4 text-cyan-neon" />
-            <span className="text-xs">Subscription Interface</span>
-          </DropdownMenuItem>
-          <DropdownMenuSeparator className="bg-white/5" />
-          <DropdownMenuItem onClick={handleLogout} className="hover:bg-destructive/10 focus:bg-destructive/10 cursor-pointer text-destructive">
-            <LogOut className="mr-2 h-4 w-4" />
-            <span className="text-xs uppercase font-bold">Terminate Session</span>
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="bg-obsidian/95 backdrop-blur-2xl border-white/10 text-white max-w-md w-[92vw] overflow-y-auto max-h-[90vh] custom-scrollbar rounded-3xl">
+        <DialogHeader>
+          <DialogTitle className="text-2xl font-black tracking-tighter uppercase mb-2">Global Settings & Auth</DialogTitle>
+          <DialogDescription className="text-white/40 font-mono text-[10px] uppercase">
+            Managing secure identity and resource allocation.
+          </DialogDescription>
+        </DialogHeader>
 
-      <Dialog open={showProfile} onOpenChange={setShowProfile}>
-        <DialogContent className="bg-obsidian/95 backdrop-blur-2xl border-white/10 text-white max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-2xl font-black tracking-tighter uppercase mb-2">Subject Configuration</DialogTitle>
-            <DialogDescription className="text-white/40 font-mono text-[10px] uppercase">
-              Managing secure identity and resource allocation.
-            </DialogDescription>
-          </DialogHeader>
+        <div className="space-y-6 py-4">
+          <div className="p-4 bg-white/5 border border-white/10 rounded-xl space-y-4">
+            {!isEditing ? (
+              <>
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-full bg-cyan-neon/20 border border-cyan-neon/50 flex items-center justify-center overflow-hidden shrink-0">
+                    {displayAvatar ? (
+                      <img src={displayAvatar} alt="Pilot Avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      <User className="w-6 h-6 text-cyan-neon" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-cyan-neon font-bold text-sm truncate">{neuralId}</div>
+                    <div className="text-[10px] font-mono text-white/40 truncate">{userEmail}</div>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => setIsEditing(true)} className="bg-white/5 border-white/10 text-xs py-1 h-8">
+                    Edit
+                  </Button>
+                </div>
+                <div className="h-[1px] bg-white/5" />
+                <div className="flex justify-between items-center text-[10px] font-mono text-white/40 uppercase">
+                  <span>Access Level</span>
+                  <span className="text-cyan-neon font-bold">{accessLevel}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                   <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-cyan-neon animate-pulse" />
+                      <span className="text-xs font-bold uppercase tracking-tight">Active Subscription</span>
+                   </div>
+                   <Badge className="bg-cyan-neon text-black text-[8px]">{accessLevel}</Badge>
+                </div>
+              </>
+            ) : (
+              <div className="space-y-4 animate-in fade-in zoom-in-95 duration-200">
+                <div className="flex justify-between items-center mb-2">
+                  <h4 className="text-xs font-bold uppercase tracking-widest text-[#deff9a]">Edit Identity</h4>
+                  <button onClick={() => setIsEditing(false)} className="text-white/40 hover:text-white"><X size={16}/></button>
+                </div>
+                
+                <div className="space-y-4">
+                  <div className="space-y-3 p-4 bg-black/20 rounded-lg border border-white/5">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] text-white/50 uppercase font-mono">Neural ID</label>
+                      <div className="relative">
+                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-neon/50" />
+                        <Input
+                          value={neuralId}
+                          onChange={(e) => setNeuralId(e.target.value)}
+                          placeholder="ENTER NEURAL ID"
+                          className="pl-9 h-10 bg-black/40 border-white/10 text-xs font-mono focus:border-cyan-neon/50 transition-colors"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
-          <div className="space-y-6 py-4">
-            <div className="p-4 bg-white/5 border border-white/10 rounded-xl space-y-3">
-              <div className="flex justify-between items-center text-[10px] font-mono text-white/40 uppercase">
-                <span>Access Level</span>
-                <span className="text-cyan-neon font-bold">LEGACY_CITIZEN</span>
+                <Button 
+                  onClick={handleSaveProfile} 
+                  disabled={loading}
+                  className="w-full bg-[#deff9a] text-black hover:bg-[#deff9a]/80 font-bold uppercase mt-2 h-10"
+                >
+                  {loading ? 'Transmitting...' : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      Sync Changes
+                    </>
+                  )}
+                </Button>
               </div>
-              <div className="flex justify-between items-center text-[10px] font-mono text-white/40 uppercase">
-                <span>Neural Bandwidth</span>
-                <span className="text-cyan-neon font-bold">1.2 GB/s</span>
-              </div>
-              <div className="h-[1px] bg-white/5" />
-              <div className="flex justify-between items-center">
-                 <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-cyan-neon animate-pulse" />
-                    <span className="text-xs font-bold uppercase tracking-tight">Active Subscription</span>
-                 </div>
-                 <Badge className="bg-cyan-neon text-black text-[8px]">PRO_OS</Badge>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <h4 className="text-[10px] uppercase font-bold text-white/40 ml-1">Terminal Output</h4>
-              <div className="bg-black/40 p-3 rounded-lg border border-white/5 h-24 overflow-y-auto font-mono text-[9px] text-cyan-neon/60">
-                <div>[SYSTEM] Local node optimization sync: COMPLETE</div>
-                <div>[SYSTEM] Encrypted identity verified via Supabase_Gateway</div>
-                <div>[SYSTEM] Subscription status check... OK</div>
-                <div className="animate-pulse">_</div>
-              </div>
-            </div>
-
-            <Button onClick={() => setShowProfile(false)} className="w-full bg-white/5 border border-white/10 hover:bg-white/10 rounded-xl uppercase text-[10px] font-bold">
-              Return to HUD
-            </Button>
+            )}
           </div>
-        </DialogContent>
-      </Dialog>
-    </>
+
+          <div className="space-y-2">
+            <h4 className="text-[10px] uppercase font-bold text-white/40 ml-1">System Preferences</h4>
+            <div className="space-y-1">
+              <Button 
+                variant="ghost" 
+                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                className="w-full justify-between pr-4 text-xs font-bold text-white/70 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10 rounded-xl h-10 transition-all"
+              >
+                <span className="flex items-center">
+                  {theme === 'dark' ? <Moon className="w-4 h-4 mr-3 text-purple-neon" /> : <Sun className="w-4 h-4 mr-3 text-cyan-neon" />}
+                  Theme Mode
+                </span>
+                <span className="text-[10px] font-mono uppercase text-white/40">{theme}</span>
+              </Button>
+            </div>
+          </div>
+
+          {userRole === 'gym_owner' && (
+            <div className="space-y-3 p-4 bg-purple-neon/5 rounded-xl border border-purple-neon/20">
+              <h4 className="text-[10px] uppercase font-bold text-purple-neon tracking-widest text-center">Facility Operations</h4>
+              <div className="bg-black/40 border border-white/10 rounded-lg p-3 text-center space-y-2">
+                 <p className="text-[10px] text-white/40 uppercase font-mono">YOUR PILOT CODE</p>
+                 <div className="flex justify-center items-center gap-2">
+                   <Key className="text-purple-neon w-4 h-4" />
+                   <span className="text-xl font-bold tracking-[0.2em]">{pilotCode || '...'}</span>
+                 </div>
+                 <p className="text-[9px] text-white/30 italic">Members use this code to register under this gym.</p>
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-2">
+             <Button onClick={onClose} className="flex-1 bg-white/5 border border-white/10 hover:bg-white/10 rounded-xl uppercase text-[10px] font-bold">
+               Return
+             </Button>
+             <Button onClick={handleLogout} className="flex-1 bg-red-500/10 border border-red-500/30 text-red-500 hover:bg-red-500/20 hover:text-red-400 rounded-xl uppercase text-[10px] font-bold gap-2">
+               <LogOut size={14} />
+               Logout
+             </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 };

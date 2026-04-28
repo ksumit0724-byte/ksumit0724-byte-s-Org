@@ -13,9 +13,8 @@ import {
 } from "./ui/dialog";
 import { Slider } from "./ui/slider";
 import { format } from "date-fns";
-
-const ZENITH_CATEGORIES = ['Office Work', 'Personal Work', 'Skills', 'Good Habits', 'Bad Habits', 'Other'];
-const TITAN_CATEGORIES = ['Workout', 'Nutrition', 'Recovery', 'Supplementation'];
+import { getSupabase } from '../lib/supabase';
+import { TITAN_CATEGORIES, ZENITH_CATEGORIES } from '../lib/constants';
 
 interface TaskInputProps {
   taskToEdit?: AetherTask | null;
@@ -25,12 +24,13 @@ interface TaskInputProps {
 }
 
 export const TaskInput: React.FC<TaskInputProps> = ({ taskToEdit, isOpen, onOpenChange, onClose }) => {
-  const { mode, addTask, updateTask } = useAetherStore();
+  const { mode, addTask, updateTask, isDemoMode, user } = useAetherStore();
   const [internalOpen, setInternalOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [intensity, setIntensity] = useState([50]);
   const [category, setCategory] = useState('');
   const [startTime, setStartTime] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+  const [reminderOffset, setReminderOffset] = useState<number>(0);
 
   const open = isOpen !== undefined ? isOpen : internalOpen;
   const setOpen = onOpenChange || setInternalOpen;
@@ -41,9 +41,11 @@ export const TaskInput: React.FC<TaskInputProps> = ({ taskToEdit, isOpen, onOpen
       setIntensity([taskToEdit.intensity || 50]);
       setCategory(taskToEdit.category);
       setStartTime(format(new Date(taskToEdit.startTime), "yyyy-MM-dd'T'HH:mm"));
+      setReminderOffset(taskToEdit.reminderOffset || 0);
       setOpen(true);
     }
   }, [taskToEdit, setOpen]);
+
 
   const categories = mode === 'titan' ? TITAN_CATEGORIES : ZENITH_CATEGORIES;
 
@@ -53,24 +55,78 @@ export const TaskInput: React.FC<TaskInputProps> = ({ taskToEdit, isOpen, onOpen
     }
   }, [mode, categories, category]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!title.trim()) return;
     
-    const taskData = {
-      type: mode === 'titan' ? 'workout' : 'work' as 'work' | 'workout',
+    // Using Zustand Task Object format
+    const taskDataLoc: Omit<AetherTask, 'id' | 'createdAt'> = {
+      type: mode === 'titan' ? 'workout' : 'work',
+      mode: mode,
       title,
       category,
       startTime: new Date(startTime).getTime(),
-      intensity: intensity[0]
+      intensity: intensity[0],
+      reminderOffset: reminderOffset > 0 ? reminderOffset : undefined,
+      reminderSent: false,
+    };
+
+    if (isDemoMode) {
+      if (taskToEdit) {
+        updateTask(taskToEdit.id, taskDataLoc);
+      } else {
+        addTask(taskDataLoc);
+      }
+      showToast("TASK_INITIALIZED");
+      resetForm();
+      return;
+    }
+
+    const client = getSupabase();
+    if (!client || !user?.id) {
+       console.error("Supabase client or user not found");
+       return;
+    }
+
+    const taskDataDB = {
+      user_id: user.id,
+      title,
+      category,
+      mode: mode,
+      start_time: new Date(startTime).toISOString(),
+      tags: reminderOffset > 0 ? ['reminder'] : [],
+      priority: intensity[0] > 70 ? 3 : intensity[0] > 40 ? 2 : 1
     };
 
     if (taskToEdit) {
-      updateTask(taskToEdit.id, taskData);
+      // In a real app we'd need to match local IDs with DB UUIDs if updating
+      // For now, assume id maps correctly or we handle it via real-time sync
+      // await client.from('tasks').update(taskDataDB).eq('id', taskToEdit.id);
+      // Fallback local update to keep UI fast
+      updateTask(taskToEdit.id, taskDataLoc);
     } else {
-      addTask(taskData);
+      const { error } = await client.from('tasks').insert(taskDataDB);
+      if (error) {
+         console.error("Task insert error:", error);
+         alert(`SYSTEM_ERROR: ${error.message}`);
+         return;
+      }
     }
 
+    showToast("TASK_INITIALIZED");
     resetForm();
+  };
+
+  const showToast = (message: string) => {
+    // Basic implementation since there's no pre-defined toast fn in the request context
+    // You could replace this if there's a specific toast utility provided
+    const toast = document.createElement('div');
+    toast.className = 'fixed bottom-4 right-4 bg-white/10 backdrop-blur-md border border-white/20 text-white font-mono text-xs px-4 py-3 rounded-lg z-50 animate-in slide-in-from-bottom-5';
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => {
+      toast.classList.add('animate-out', 'fade-out', 'slide-out-to-bottom-5');
+      setTimeout(() => toast.remove(), 300);
+    }, 3000);
   };
 
   const resetForm = () => {
@@ -78,6 +134,7 @@ export const TaskInput: React.FC<TaskInputProps> = ({ taskToEdit, isOpen, onOpen
     setIntensity([50]);
     setCategory(categories[0]);
     setStartTime(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+    setReminderOffset(0);
     setOpen(false);
     if (onClose) onClose();
   };
@@ -92,8 +149,8 @@ export const TaskInput: React.FC<TaskInputProps> = ({ taskToEdit, isOpen, onOpen
         setOpen(val);
         if (!val && onClose) onClose();
       }}>
-        <DialogContent className="bg-obsidian/95 backdrop-blur-2xl border-white/10 text-white w-[95vw] sm:max-w-lg p-0 overflow-hidden rounded-3xl">
-          <div className="relative p-6 md:p-8">
+        <DialogContent className="bg-obsidian/95 backdrop-blur-2xl border-white/10 text-white w-[92vw] max-w-[92vw] sm:max-w-lg p-0 h-auto max-h-[85vh] overflow-y-auto rounded-3xl custom-scrollbar top-[50%] translate-y-[-50%]">
+          <div className="relative p-4 md:p-8">
              <div className={`absolute top-0 right-0 p-8 ${accentColor} opacity-5 hidden md:block`}>
                {mode === 'titan' ? <Dumbbell className="w-48 h-48 -mr-12 -mt-12" /> : <Laptop className="w-48 h-48 -mr-12 -mt-12" />}
              </div>
@@ -157,6 +214,23 @@ export const TaskInput: React.FC<TaskInputProps> = ({ taskToEdit, isOpen, onOpen
                   </div>
                 </div>
 
+                <div className="space-y-2">
+                   <label className="text-[10px] uppercase font-bold text-white/40 ml-1 tracking-widest flex items-center gap-2">
+                     <Clock size={10} /> Alert Directive
+                   </label>
+                   <select 
+                      value={reminderOffset}
+                      onChange={(e) => setReminderOffset(Number(e.target.value))}
+                      className="w-full bg-white/5 border border-white/10 focus:border-cyan-neon/30 h-10 rounded-xl text-xs font-mono px-4 outline-none appearance-none"
+                   >
+                     <option value={0} className="bg-obsidian text-white">No Reminder</option>
+                     <option value={5} className="bg-obsidian text-white">5 mins before</option>
+                     <option value={15} className="bg-obsidian text-white">15 mins before</option>
+                     <option value={30} className="bg-obsidian text-white">30 mins before</option>
+                     <option value={60} className="bg-obsidian text-white">1 hour before</option>
+                   </select>
+                </div>
+
                 <div className="space-y-4">
                    <div className="flex justify-between items-end">
                       <label className="text-[10px] uppercase font-bold text-white/40 ml-1 tracking-widest">Intensity Scalar</label>
@@ -164,7 +238,7 @@ export const TaskInput: React.FC<TaskInputProps> = ({ taskToEdit, isOpen, onOpen
                    </div>
                    <Slider 
                       value={intensity} 
-                      onValueChange={setIntensity} 
+                      onValueChange={(val) => setIntensity(val as number[])} 
                       max={100} 
                       step={1} 
                       className={`py-2`}

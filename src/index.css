@@ -2,7 +2,7 @@
 @import "tailwindcss";
 
 @theme {
-  --color-obsidian: #0D0D0D;
+  --color-obsidian: #0b0e14;
   --color-cyan-neon: #00F3FF;
   --color-purple-neon: #BC13FE;
   --color-glass-white: rgba(255, 255, 255, 0.05);
@@ -25,10 +25,19 @@
   }
 }
 
+.light {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+.light img, 
+.light svg.rbh {
+  filter: invert(1) hue-rotate(180deg);
+}
+
 @layer base {
   body {
     @apply bg-obsidian text-text-main font-sans antialiased selection:bg-cyan-neon selection:text-black;
-    @apply overflow-hidden selection:bg-cyan-neon;
+    @apply overflow-hidden;
   }
 }
 
@@ -206,4 +215,21 @@
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.2);
+}
+
+.mask-edges {
+  mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
+  -webkit-mask-image: -webkit-linear-gradient(left, transparent, black 5%, black 95%, transparent);
+}
+
+@keyframes glitch {
+  0%   { color: cyan; transform: translateX(0); }
+  20%  { color: red; transform: translateX(-2px); }
+  40%  { color: grey; transform: translateX(2px); }
+  60%  { color: cyan; transform: translateX(-1px); }
+  80%  { color: red; transform: translateX(1px); }
+  100% { color: inherit; transform: translateX(0); }
+}
+.glitch-effect {
+  animation: glitch 0.6s steps(1) forwards;
 }
