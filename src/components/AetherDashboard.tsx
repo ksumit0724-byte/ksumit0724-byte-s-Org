@@ -48,7 +48,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 export default function AetherDashboard() {
-  const { mode, tasks, addTask, updateTask, deleteTask, updateUser, user, isDemoMode } = useAetherStore();
+  const { mode, tasks, addTask, updateTask, deleteTask, updateUser, user, isDemoMode, resetMode } = useAetherStore();
   const [taskToEdit, setTaskToEdit] = useState<AetherTask | null>(null);
   const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
   const [isTaskInputOpen, setIsTaskInputOpen] = useState(false);
@@ -118,7 +118,10 @@ export default function AetherDashboard() {
   };
 
   const handleGoHome = async () => {
-    // Clear locally immediately
+    // Reset Zustand store state to show mode selection
+    resetMode();
+    
+    // Clear locally in user metadata if needed
     updateUser({ modeSelected: false });
     
     // Clear in Supabase if linked

@@ -12,6 +12,7 @@ export const useAuth = () => {
   const isDemoMode = useAetherStore((state) => state.isDemoMode);
   const setUser = useAetherStore((state) => state.setUser);
   const setSession = useAetherStore((state) => state.setSession);
+  const resetMode = useAetherStore((state) => state.resetMode);
 
   const signUpAsGymOwner = async (email: string, password: string, gymName: string) => {
     if (isDemoMode) return demoProfile;
@@ -96,6 +97,7 @@ export const useAuth = () => {
     if (!isDemoMode) {
       await authService.signOut();
     }
+    resetMode();
     setUser(null);
     setSession(null);
   };

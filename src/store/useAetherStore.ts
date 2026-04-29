@@ -34,7 +34,10 @@ interface AetherState {
   notifications: AetherNotification[];
   targetedMuscles: string[];
   isDemoMode: boolean;
+  activeMode: AppMode | null;
+  currentScreen: 'mode-selection' | 'dashboard';
   setMode: (mode: AppMode) => void;
+  resetMode: () => void;
   setTheme: (theme: AppTheme) => void;
   setUser: (user: any) => void;
   setSession: (session: any) => void;
@@ -59,7 +62,10 @@ export const useAetherStore = create<AetherState>()(
       notifications: [],
       targetedMuscles: [],
       isDemoMode: false,
-      setMode: (mode) => set({ mode }),
+      activeMode: null,
+      currentScreen: 'mode-selection',
+      setMode: (mode) => set({ mode, activeMode: mode, currentScreen: 'dashboard' }),
+      resetMode: () => set({ activeMode: null, currentScreen: 'mode-selection' }),
       setTheme: (theme) => set({ theme }),
       setUser: (user) => set({ user }),
       setSession: (session) => set({ session }),

@@ -10,7 +10,7 @@ import { Button } from "./components/ui/button";
 import { AdminPortal } from "./components/AdminPortal";
 
 export default function App() {
-  const { session, user, setSession, setUser, isDemoMode, setDemoMode, theme } = useAetherStore();
+  const { session, user, setSession, setUser, isDemoMode, setDemoMode, theme, currentScreen } = useAetherStore();
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -147,7 +147,6 @@ export default function App() {
   }
 
   const userMetadata = session?.user?.user_metadata || user?.user_metadata || {};
-  const hasSelectedMode = userMetadata.modeSelected === true || session?.user?.modeSelected === true || user?.modeSelected === true;
   const isVerified = userMetadata.is_verified ?? true; // Default to true for backward comp
   
   if (!isVerified) {
@@ -163,7 +162,10 @@ export default function App() {
             Authorization in progress. The Super Admin is verifying your credentials. Full access will be granted shortly.
           </p>
           <Button 
-            onClick={() => authService.signOut()}
+            onClick={() => {
+              useAetherStore.getState().resetMode();
+              authService.signOut();
+            }}
             variant="outline"
             className="w-full border-purple-neon/30 text-purple-neon hover:bg-purple-neon/10 rounded-xl uppercase text-xs font-bold font-mono tracking-widest"
           >
@@ -182,7 +184,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-obsidian text-text-main antialiased selection:bg-cyan-neon selection:text-black">
       <AnimatePresence mode="wait">
-        {!hasSelectedMode ? (
+        {currentScreen === 'mode-selection' ? (
            <motion.div
              key="selection-container"
              initial={{ opacity: 0 }}
