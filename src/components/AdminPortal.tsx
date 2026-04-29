@@ -7,9 +7,24 @@ import { createClient } from '@supabase/supabase-js';
 import { SUPER_ADMIN_EMAIL } from '../lib/constants';
 import { useNavigate } from 'react-router-dom';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const serviceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY || '';
-const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+const supabaseUrlRaw = import.meta.env.VITE_SUPABASE_URL;
+const serviceRoleKeyRaw = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
+
+const sanitizeKey = (key: any) => {
+  if (key && typeof key === 'string') {
+    return key.trim().replace(/^["'](.+(?=["']$))["']$/, '$1');
+  }
+  return '';
+};
+
+const supabaseUrl = sanitizeKey(supabaseUrlRaw);
+const serviceRoleKey = sanitizeKey(serviceRoleKeyRaw);
+
+// Create a helper to get the admin client so it doesn't crash on module load if keys are missing
+const getSupabaseAdmin = () => {
+  if (!supabaseUrl || !serviceRoleKey || supabaseUrl === 'undefined' || serviceRoleKey === 'undefined') return null;
+  return createClient(supabaseUrl, serviceRoleKey);
+};
 
 export const AdminPortal: React.FC = () => {
   const [owners, setOwners] = useState<any[]>([]);
@@ -26,7 +41,10 @@ export const AdminPortal: React.FC = () => {
 
   const fetchPendingOwners = async () => {
     if (useAetherStore.getState().isDemoMode) return;
-    const { data, error } = await supabaseAdmin
+    const adminClient = getSupabaseAdmin();
+    if (!adminClient) return;
+
+    const { data, error } = await adminClient
       .from('profiles')
       .select('*, gyms(gym_name, pilot_code)')
       .eq('role', 'gym_owner')
@@ -47,7 +65,10 @@ export const AdminPortal: React.FC = () => {
       setOwners(prev => prev.filter(o => o.id !== id));
       return;
     }
-    const { error } = await supabaseAdmin
+    const adminClient = getSupabaseAdmin();
+    if (!adminClient) return;
+
+    const { error } = await adminClient
       .from('profiles')
       .update({ is_verified: true })
       .eq('id', id);
@@ -63,8 +84,11 @@ export const AdminPortal: React.FC = () => {
       setOwners(prev => prev.filter(o => o.id !== id));
       return;
     }
+    const adminClient = getSupabaseAdmin();
+    if (!adminClient) return;
+
     // Delete from auth.users (cascades to profile)
-    await supabaseAdmin.auth.admin.deleteUser(id);
+    await adminClient.auth.admin.deleteUser(id);
     setOwners(prev => prev.filter(o => o.id !== id));
   };
 

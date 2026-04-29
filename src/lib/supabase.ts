@@ -1,21 +1,24 @@
 import { createClient } from '@supabase/supabase-js';
 
-let supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-let supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrlRaw = import.meta.env.VITE_SUPABASE_URL;
+const supabaseKeyRaw = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 // Sanitize keys (remove whitespace and common quoting characters)
-if (supabaseUrl && typeof supabaseUrl === 'string') {
-  supabaseUrl = supabaseUrl.trim().replace(/^["'](.+(?=["']$))["']$/, '$1');
-}
-if (supabaseAnonKey && typeof supabaseAnonKey === 'string') {
-  supabaseAnonKey = supabaseAnonKey.trim().replace(/^["'](.+(?=["']$))["']$/, '$1');
-}
+const sanitizeKey = (key: any) => {
+  if (key && typeof key === 'string') {
+    return key.trim().replace(/^["'](.+(?=["']$))["']$/, '$1');
+  }
+  return '';
+};
+
+export const supabaseUrl = sanitizeKey(supabaseUrlRaw);
+export const supabaseKey = sanitizeKey(supabaseKeyRaw);
 
 export const isSupabaseConfigured = Boolean(
   supabaseUrl && 
-  supabaseAnonKey && 
+  supabaseKey && 
   supabaseUrl !== 'undefined' && 
-  supabaseAnonKey !== 'undefined' &&
+  supabaseKey !== 'undefined' &&
   supabaseUrl.startsWith('https://')
 );
 
@@ -25,13 +28,13 @@ export const getSupabase = () => {
   if (!isSupabaseConfigured) {
     console.warn("Supabase configuration is missing or invalid. Authentication and database features will be disabled.");
     console.log("URL:", supabaseUrl);
-    console.log("Key:", supabaseAnonKey ? "PRESENT (length: " + supabaseAnonKey.length + ")" : "MISSING");
+    console.log("Key:", supabaseKey ? "PRESENT (length: " + supabaseKey.length + ")" : "MISSING");
     return null;
   }
   
   if (!supabaseInstance) {
     try {
-      supabaseInstance = createClient(supabaseUrl!, supabaseAnonKey!, {
+      supabaseInstance = createClient(supabaseUrl, supabaseKey, {
         auth: {
           persistSession: true,
           autoRefreshToken: true,
