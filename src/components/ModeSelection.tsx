@@ -9,9 +9,15 @@ import { getSupabase } from "../lib/supabase";
 
 export default function ModeSelection() {
   const { setMode, updateUser, user, isDemoMode } = useAetherStore();
-  const userRole = user?.role || user?.user_metadata?.role || 'individual';
-  const canAccessTitan = ['pilot', 'gym_owner', 'super_admin'].includes(userRole);
-  const canAccessZenith = ['individual', 'gym_owner', 'super_admin'].includes(userRole);
+  const userRole = (user?.role || user?.user_metadata?.role || 'individual').toLowerCase();
+  
+  const isGymOwner = userRole === 'owner' || userRole === 'gym_owner';
+  const isPilot = userRole === 'pilot';
+  const isIndividual = userRole === 'individual';
+  const isSuperAdmin = userRole === 'super_admin';
+
+  const canAccessTitan = isGymOwner || isPilot || isSuperAdmin;
+  const canAccessZenith = isIndividual || isSuperAdmin;
 
   const [glitchTitan, setGlitchTitan] = useState(false);
   const [showErrorTitan, setShowErrorTitan] = useState(false);

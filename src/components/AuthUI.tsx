@@ -201,7 +201,7 @@ export const AuthUI: React.FC = () => {
           role: userRole,
           gym_name: gymName,
           facility_code: role === 'owner' ? facilityCode : pilotCode,
-          is_verified: role === 'owner' ? false : true,
+          is_verified: true,
           area: role === 'owner' ? area : undefined,
           pincode: role === 'owner' ? pincode : undefined,
           plan: role === 'owner' ? plan : undefined,

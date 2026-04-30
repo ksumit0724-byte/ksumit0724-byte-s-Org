@@ -44,10 +44,10 @@ export default function App() {
         setUser(session?.user ?? null);
         
         if (session?.user && useAetherStore.getState().currentScreen === 'mode-selection' && !useAetherStore.getState().activeMode) {
-          const role = session.user.user_metadata?.role || 'individual';
+          const role = (session.user.user_metadata?.role || 'individual').toLowerCase();
           if (role === 'individual') {
             useAetherStore.getState().setMode('zenith');
-          } else if (role === 'pilot') {
+          } else if (role === 'pilot' || role === 'owner' || role === 'gym_owner') {
             useAetherStore.getState().setMode('titan');
           }
         }
@@ -68,10 +68,10 @@ export default function App() {
       setUser(session?.user ?? null);
       
       if (event === 'SIGNED_IN' && session?.user) {
-        const role = session.user.user_metadata?.role || 'individual';
+        const role = (session.user.user_metadata?.role || 'individual').toLowerCase();
         if (role === 'individual') {
           useAetherStore.getState().setMode('zenith');
-        } else if (role === 'pilot') {
+        } else if (role === 'pilot' || role === 'owner' || role === 'gym_owner') {
           useAetherStore.getState().setMode('titan');
         }
       }
@@ -167,7 +167,7 @@ export default function App() {
   }
 
   const userMetadata = session?.user?.user_metadata || user?.user_metadata || {};
-  const isVerified = userMetadata.is_verified ?? true; // Default to true for backward comp
+  const isVerified = true; // userMetadata.is_verified ?? true; // Default to true for backward comp
   
   if (!isVerified) {
     return (
