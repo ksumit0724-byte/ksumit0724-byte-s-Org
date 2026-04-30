@@ -14,7 +14,10 @@ export interface AetherTask {
   intensity?: number; // 0-100
   reminderOffset?: number; // minutes before start time
   reminderSent?: boolean;
+  status?: 'pending' | 'active' | 'complete' | 'overdue';
   createdAt: number;
+  energyLevel?: number;
+  outputType?: 'Creative' | 'Analytical' | 'Communication' | 'Learning' | string;
 }
 
 export interface AetherNotification {
@@ -42,9 +45,10 @@ interface AetherState {
   setUser: (user: any) => void;
   setSession: (session: any) => void;
   setDemoMode: (isDemo: boolean) => void;
-  addTask: (task: Omit<AetherTask, 'id' | 'createdAt'>) => void;
+  addTask: (task: Omit<AetherTask, 'id' | 'createdAt'> & { id?: string, status?: 'pending' | 'active' | 'complete' | 'overdue', createdAt?: number }) => void;
   updateTask: (id: string, updates: Partial<AetherTask>) => void;
   deleteTask: (id: string) => void;
+  setTasks: (tasks: AetherTask[]) => void;
   addNotification: (notif: Omit<AetherNotification, 'id' | 'timestamp'>) => void;
   removeNotification: (id: string) => void;
   toggleMuscle: (muscle: string) => void;
@@ -71,7 +75,7 @@ export const useAetherStore = create<AetherState>()(
       setSession: (session) => set({ session }),
       setDemoMode: (isDemoMode) => set({ isDemoMode }),
       addTask: (task) => set((state) => ({
-        tasks: [{ ...task, id: Math.random().toString(36).substr(2, 9), createdAt: Date.now() }, ...state.tasks]
+        tasks: [{ ...task, id: task.id || Math.random().toString(36).substr(2, 9), createdAt: task.createdAt || Date.now(), status: task.status || 'pending' }, ...state.tasks]
       })),
       updateTask: (id, updates) => set((state) => ({
         tasks: state.tasks.map(t => t.id === id ? { ...t, ...updates } : t)
@@ -79,6 +83,7 @@ export const useAetherStore = create<AetherState>()(
       deleteTask: (id) => set((state) => ({
         tasks: state.tasks.filter(t => t.id !== id)
       })),
+      setTasks: (tasks) => set({ tasks }),
       updateUser: (updates) => set((state) => {
         const newUser = state.user ? { ...state.user, ...updates } : updates;
         

@@ -13,8 +13,9 @@ export const AuthUI: React.FC = () => {
   
   // Registration States
   const [role, setRole] = useState<'individual' | 'pilot' | 'owner'>('individual');
-  const [username, setUsername] = useState(''); // Custom User ID for Individual
-  const [gymName, setGymName] = useState(''); // Used by Owner and Gym Pilot
+  const [customId, setCustomId] = useState(''); // Used by Individual
+  const [gymName, setGymName] = useState(''); // Used by Owner
+  const [pilotCode, setPilotCode] = useState(''); // Used by Pilot
   
   // Owner Specific
   const [area, setArea] = useState('');
@@ -26,6 +27,24 @@ export const AuthUI: React.FC = () => {
   const [successCode, setSuccessCode] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<React.ReactNode>(null);
   
+  const [pilotValidation, setPilotValidation] = useState<{ isValid: boolean, message: string } | null>(null);
+
+  const validatePilotCode = async () => {
+    if (!pilotCode.trim()) {
+      setPilotValidation(null);
+      return;
+    }
+    const client = (await import('../lib/supabase')).getSupabase();
+    if (!client) return;
+
+    const { data: gym } = await client.from('gyms').select('gym_name').eq('pilot_code', pilotCode).single();
+    if (gym) {
+      setPilotValidation({ isValid: true, message: `✓ ${gym.gym_name.toUpperCase()} — Node found` });
+    } else {
+      setPilotValidation({ isValid: false, message: 'Invalid pilot code. Neural connection rejected.' });
+    }
+  };
+
   const [isOtpMode, setIsOtpMode] = useState(false);
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [timer, setTimer] = useState(60);
@@ -142,7 +161,7 @@ export const AuthUI: React.FC = () => {
       if (isLogin) {
         await authService.signIn(email, password);
       } else {
-        let finalUsername = username;
+        let finalUsername = '';
         let facilityCode = '';
         
         if (role === 'owner') {
@@ -151,30 +170,54 @@ export const AuthUI: React.FC = () => {
           facilityCode = `${prefix}-${digits}`;
           finalUsername = gymName;
         } else if (role === 'pilot') {
-          // Auto generate pilot code based on gym name
-          const prefix = (gymName || 'GYM').slice(0, 3).toUpperCase().replace(/[^A-Z]/g, 'A');
-          const digits = Math.floor(1000 + Math.random() * 9000);
-          finalUsername = `${prefix}_PILOT_${digits}`;
+          finalUsername = `PILOT_${pilotCode}`;
+        } else if (role === 'individual') {
+          if (customId && customId.length >= 3) {
+            const clean = customId
+              .toUpperCase()
+              .replace(/[^A-Z0-9_]/g, '')
+              .substring(0, 12);
+            const digits3 = Math.floor(Math.random() * 900 + 100).toString();
+            finalUsername = '@' + clean + '_' + digits3;
+          } else {
+            const elements = ['OXYGEN','CARBON','NEON','ARGON','XENON','NOVA','NEXUS','HELIUM'];
+            const el = elements[Math.floor(Math.random() * elements.length)];
+            const digits = Math.floor(Math.random() * 90000000 + 10000000).toString();
+            finalUsername = '@' + el + '_' + digits;
+          }
         }
 
         const limits = role === 'owner' ? (plan === 'basic' ? 50 : plan === 'pro' ? 200 : 9999) : 0;
 
-        let userRole = 'pilot';
+        let userRole = 'individual';
         if (role === 'owner') {
           userRole = 'gym_owner';
+        } else if (role === 'pilot') {
+          userRole = 'pilot';
         }
 
-        await authService.signUp(email, password, { 
+        const authResult = await authService.signUp(email, password, { 
           username: finalUsername, 
           role: userRole,
           gym_name: gymName,
-          facility_code: facilityCode,
+          facility_code: role === 'owner' ? facilityCode : pilotCode,
           is_verified: role === 'owner' ? false : true,
           area: role === 'owner' ? area : undefined,
           pincode: role === 'owner' ? pincode : undefined,
           plan: role === 'owner' ? plan : undefined,
           pilot_limit: limits
         });
+
+        if (role === 'individual' && authResult?.user) {
+          const client = (await import('../lib/supabase')).getSupabase();
+          if (client) {
+            await client.from('profiles').update({
+              neural_id: finalUsername,
+              role: 'individual',
+              is_verified: true
+            }).eq('id', authResult.user.id);
+          }
+        }
 
         if (role === 'owner') {
           setSuccessMessage(
@@ -184,14 +227,6 @@ export const AuthUI: React.FC = () => {
             </>
           );
           setSuccessCode(facilityCode);
-        } else if (role === 'pilot') {
-          setSuccessMessage(
-            <>
-              Pilot Node Authorized for Gym: {gymName}.<br/>
-              Your generated Pilot Code is:
-            </>
-          );
-          setSuccessCode(finalUsername);
         } else {
           setIsOtpMode(true);
         }
@@ -259,23 +294,26 @@ export const AuthUI: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setRole('individual')}
-                        className={`h-12 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all border ${role === 'individual' ? 'bg-cyan-neon/10 border-cyan-neon text-cyan-neon' : 'bg-white/5 border-white/10 text-white/40 hover:bg-white/10'}`}
+                        className={`p-3 rounded-xl flex flex-col items-center justify-center text-center transition-all border ${role === 'individual' ? 'bg-cyan-neon/10 border-cyan-neon shadow-[0_0_15px_rgba(0,243,255,0.1)]' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
                       >
-                        Individual
+                        <span className={`text-[10px] font-bold uppercase tracking-wider mb-2 ${role === 'individual' ? 'text-cyan-neon' : 'text-white/40'}`}>Individual</span>
+                        <span className="text-[8px] text-white/30 leading-tight font-mono">Personal fitness + deep work</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => setRole('pilot')}
-                        className={`h-12 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all border ${role === 'pilot' ? 'bg-purple-neon/10 border-purple-neon text-purple-neon' : 'bg-white/5 border-white/10 text-white/40 hover:bg-white/10'}`}
+                        className={`p-3 rounded-xl flex flex-col items-center justify-center text-center transition-all border ${role === 'pilot' ? 'bg-purple-neon/10 border-purple-neon shadow-[0_0_15px_rgba(188,19,254,0.1)]' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
                       >
-                        Gym Pilot
+                        <span className={`text-[10px] font-bold uppercase tracking-wider mb-2 ${role === 'pilot' ? 'text-purple-neon' : 'text-white/40'}`}>Gym Pilot</span>
+                        <span className="text-[8px] text-white/30 leading-tight font-mono">Gym member with pilot code access</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => setRole('owner')}
-                        className={`h-12 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all border ${role === 'owner' ? 'bg-[#deff9a]/10 border-[#deff9a] text-[#deff9a]' : 'bg-white/5 border-white/10 text-white/40 hover:bg-white/10'}`}
+                        className={`p-3 rounded-xl flex flex-col items-center justify-center text-center transition-all border ${role === 'owner' ? 'bg-[#deff9a]/10 border-[#deff9a] shadow-[0_0_15px_rgba(222,255,154,0.1)]' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
                       >
-                        Gym Owner
+                        <span className={`text-[10px] font-bold uppercase tracking-wider mb-2 ${role === 'owner' ? 'text-[#deff9a]' : 'text-white/40'}`}>Gym Owner</span>
+                        <span className="text-[8px] text-white/30 leading-tight font-mono">Gym owner / trainer</span>
                       </button>
                     </div>
                   </div>
@@ -291,19 +329,23 @@ export const AuthUI: React.FC = () => {
                         className="space-y-4"
                       >
                         <div className="space-y-2">
-                          <label className="text-[10px] uppercase tracking-widest text-cyan-neon/50 font-bold ml-1 font-mono">Custom User ID</label>
-                          <Input
-                            type="text"
-                            placeholder="e.g. DARK_KNIGHT"
-                            value={username}
-                            onChange={(e) => setUsername(e.target.value)}
-                            className="bg-cyan-neon/5 border-cyan-neon/20 focus:border-cyan-neon/50 h-14 rounded-2xl text-white placeholder:text-white/10 transition-all font-mono"
-                            required={role === 'individual'}
-                          />
+                          <label className="text-[10px] uppercase tracking-widest text-cyan-neon/50 font-bold ml-1 font-mono">Choose Your Neural ID (Optional)</label>
+                          <div className="relative">
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 font-mono text-lg">@</span>
+                            <Input
+                              type="text"
+                              placeholder="e.g. DARKNIGHT"
+                              value={customId}
+                              onChange={(e) => setCustomId(e.target.value)}
+                              maxLength={12}
+                              className="bg-cyan-neon/5 border-cyan-neon/20 focus:border-cyan-neon/50 h-14 rounded-2xl text-white placeholder:text-white/10 transition-all font-mono pl-10"
+                            />
+                          </div>
+                          <p className="text-[8px] text-white/30 uppercase mt-1 mb-2">Only letters and numbers. Max 12 characters.</p>
                         </div>
                       </motion.div>
                     )}
-                    
+
                     {role === 'pilot' && (
                       <motion.div 
                         key="pilot-field"
@@ -314,16 +356,23 @@ export const AuthUI: React.FC = () => {
                         className="space-y-4"
                       >
                         <div className="space-y-2">
-                          <label className="text-[10px] uppercase tracking-widest text-purple-neon/50 font-bold ml-1 font-mono">Gym / Facility Name</label>
+                          <label className="text-[10px] uppercase tracking-widest text-purple-neon/50 font-bold ml-1 font-mono">Pilot Code</label>
                           <Input
                             type="text"
-                            placeholder="e.g. OXYGEN GYM"
-                            value={gymName}
-                            onChange={(e) => setGymName(e.target.value)}
+                            placeholder="e.g. OXY-123"
+                            value={pilotCode}
+                            onChange={(e) => setPilotCode(e.target.value)}
+                            onBlur={validatePilotCode}
                             className="bg-purple-neon/5 border-purple-neon/20 focus:border-purple-neon/50 h-14 rounded-2xl text-white placeholder:text-white/10 transition-all font-mono"
                             required={role === 'pilot'}
                           />
-                          <p className="text-[8px] text-white/30 uppercase mt-1 mb-2">Pilot code will generate automatically based on Gym Name.</p>
+                          {pilotValidation ? (
+                            <p className={`text-[9px] font-bold uppercase mt-1 mb-2 font-mono tracking-widest ${pilotValidation.isValid ? 'text-[#deff9a]' : 'text-red-500'}`}>
+                              {pilotValidation.message}
+                            </p>
+                          ) : (
+                            <p className="text-[8px] text-white/30 uppercase mt-1 mb-2 font-mono">Enter the pilot code provided by your gym.</p>
+                          )}
                         </div>
                       </motion.div>
                     )}

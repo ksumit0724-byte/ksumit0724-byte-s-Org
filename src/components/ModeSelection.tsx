@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useAetherStore, AppMode } from "../store/useAetherStore";
-import { Dumbbell, Laptop, ArrowRight } from "lucide-react";
+import { Dumbbell, Laptop, ArrowRight, Lock } from "lucide-react";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 
@@ -9,19 +9,33 @@ import { getSupabase } from "../lib/supabase";
 
 export default function ModeSelection() {
   const { setMode, updateUser, user, isDemoMode } = useAetherStore();
-  const userRole = user?.role || user?.user_metadata?.role || 'zenith_user';
-  const isPilot = userRole === 'pilot';
-  const [glitch, setGlitch] = useState(false);
-  const [showError, setShowError] = useState(false);
+  const userRole = user?.role || user?.user_metadata?.role || 'individual';
+  const canAccessTitan = ['pilot', 'gym_owner', 'super_admin'].includes(userRole);
+  const canAccessZenith = ['individual', 'gym_owner', 'super_admin'].includes(userRole);
+
+  const [glitchTitan, setGlitchTitan] = useState(false);
+  const [showErrorTitan, setShowErrorTitan] = useState(false);
+  
+  const [glitchZenith, setGlitchZenith] = useState(false);
+  const [showErrorZenith, setShowErrorZenith] = useState(false);
 
   const handleSelect = async (mode: AppMode) => {
-    if (mode === 'zenith' && isPilot) {
-      setGlitch(true);
-      setShowError(true);
+    if (mode === 'titan' && !canAccessTitan) {
+      setGlitchTitan(true);
+      setShowErrorTitan(true);
       setTimeout(() => {
-        setGlitch(false);
-        setShowError(false);
-      }, 3000); // Wait enough time for the animation and for user to read
+        setGlitchTitan(false);
+        setShowErrorTitan(false);
+      }, 3000);
+      return;
+    }
+    if (mode === 'zenith' && !canAccessZenith) {
+      setGlitchZenith(true);
+      setShowErrorZenith(true);
+      setTimeout(() => {
+        setGlitchZenith(false);
+        setShowErrorZenith(false);
+      }, 3000);
       return;
     }
     setMode(mode);
@@ -74,16 +88,33 @@ export default function ModeSelection() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8 max-w-5xl w-full z-10 px-4 md:px-6">
         {/* Titan Mode */}
         <motion.div
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          className="glass-panel p-8 md:p-12 flex flex-col items-center gap-6 md:gap-8 group cursor-pointer border border-white/5 hover:border-purple-neon/40 transition-all bg-white/[0.02] relative overflow-hidden"
+          whileHover={canAccessTitan ? { scale: 1.02 } : {}}
+          whileTap={canAccessTitan ? { scale: 0.98 } : {}}
+          className={`glass-panel p-8 md:p-12 flex flex-col items-center gap-6 md:gap-8 group relative overflow-visible transition-all cursor-pointer border hover:border-purple-neon/40 bg-white/[0.02] ${!canAccessTitan ? 'border-white/5 opacity-40 grayscale' : 'border-white/5'} ${glitchTitan ? 'glitch-effect' : ''}`}
           onClick={() => handleSelect('titan')}
         >
+          {showErrorTitan && !canAccessTitan && (
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="absolute -top-12 inset-x-0 mx-auto w-max z-50 pointer-events-none"
+            >
+              <Badge variant="destructive" className="bg-red-500/20 text-red-500 border border-red-500/50 font-mono tracking-widest text-[9px] uppercase backdrop-blur-md px-3 py-1 animate-pulse shadow-[0_0_20px_rgba(239,68,68,0.4)]">
+                TITAN_LOCKED: Gym membership required
+              </Badge>
+            </motion.div>
+          )}
           <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
             <Dumbbell className="w-24 h-24 -mr-8 -mt-8" />
           </div>
-          <div className="w-16 h-16 md:w-20 md:h-20 bg-purple-neon/10 rounded-2xl flex items-center justify-center group-hover:bg-purple-neon/20 transition-colors border border-purple-neon/20">
-            <Dumbbell className="w-8 h-8 md:w-10 md:h-10 text-purple-neon" />
+          <div className={`w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center transition-colors border relative ${glitchTitan && !canAccessTitan ? 'bg-red-500/10 border-red-500/30' : 'bg-purple-neon/10 group-hover:bg-purple-neon/20 border-purple-neon/20'}`}>
+            <Dumbbell className={`w-8 h-8 md:w-10 md:h-10 ${glitchTitan && !canAccessTitan ? 'text-red-500' : 'text-purple-neon'}`} />
+            {!canAccessTitan && (
+              <div className="absolute -bottom-2 -right-2 bg-red-500/20 border border-red-500/50 p-1.5 rounded-full backdrop-blur-md">
+                <Lock className="w-3 h-3 text-red-500" />
+              </div>
+            )}
           </div>
           <div className="text-center relative z-10">
             <h3 className="text-2xl md:text-3xl font-black md:font-bold uppercase tracking-tight mb-2 font-heading">TITAN</h3>
@@ -97,12 +128,12 @@ export default function ModeSelection() {
 
         {/* Zenith Mode */}
         <motion.div
-          whileHover={!isPilot ? { scale: 1.02 } : {}}
-          whileTap={!isPilot ? { scale: 0.98 } : {}}
-          className={`glass-panel p-8 md:p-12 flex flex-col items-center gap-6 md:gap-8 group relative overflow-visible transition-all cursor-pointer border hover:border-cyan-neon/40 bg-white/[0.02] ${isPilot ? 'border-white/5 opacity-80' : 'border-white/5'} ${glitch && isPilot ? 'glitch-effect' : ''}`}
+          whileHover={canAccessZenith ? { scale: 1.02 } : {}}
+          whileTap={canAccessZenith ? { scale: 0.98 } : {}}
+          className={`glass-panel p-8 md:p-12 flex flex-col items-center gap-6 md:gap-8 group relative overflow-visible transition-all cursor-pointer border hover:border-cyan-neon/40 bg-white/[0.02] ${!canAccessZenith ? 'border-white/5 opacity-40 grayscale' : 'border-white/5'} ${glitchZenith ? 'glitch-effect' : ''}`}
           onClick={() => handleSelect('zenith')}
         >
-          {showError && isPilot && (
+          {showErrorZenith && !canAccessZenith && (
             <motion.div 
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -110,15 +141,20 @@ export default function ModeSelection() {
               className="absolute -top-12 inset-x-0 mx-auto w-max z-50 pointer-events-none"
             >
               <Badge variant="destructive" className="bg-red-500/20 text-red-500 border border-red-500/50 font-mono tracking-widest text-[9px] uppercase backdrop-blur-md px-3 py-1 animate-pulse shadow-[0_0_20px_rgba(239,68,68,0.4)]">
-                SYSTEM_ALERT: AUTHORIZATION_LEVEL_INSUFFICIENT
+                ZENITH_LOCKED: AUTHORIZATION_LEVEL_INSUFFICIENT
               </Badge>
             </motion.div>
           )}
           <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
             <Laptop className="w-24 h-24 -mr-8 -mt-8" />
           </div>
-          <div className={`w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center transition-colors border ${glitch && isPilot ? 'bg-red-500/10 border-red-500/30' : 'bg-cyan-neon/10 group-hover:bg-cyan-neon/20 border-cyan-neon/20'}`}>
-            <Laptop className={`w-8 h-8 md:w-10 md:h-10 ${glitch && isPilot ? 'text-red-500' : 'text-cyan-neon'}`} />
+          <div className={`w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center transition-colors border relative ${glitchZenith && !canAccessZenith ? 'bg-red-500/10 border-red-500/30' : 'bg-cyan-neon/10 group-hover:bg-cyan-neon/20 border-cyan-neon/20'}`}>
+            <Laptop className={`w-8 h-8 md:w-10 md:h-10 ${glitchZenith && !canAccessZenith ? 'text-red-500' : 'text-cyan-neon'}`} />
+            {!canAccessZenith && (
+              <div className="absolute -bottom-2 -right-2 bg-red-500/20 border border-red-500/50 p-1.5 rounded-full backdrop-blur-md">
+                <Lock className="w-3 h-3 text-red-500" />
+              </div>
+            )}
           </div>
           <div className="text-center relative z-10">
             <h3 className="text-2xl md:text-3xl font-black md:font-bold uppercase tracking-tight mb-2 font-heading">ZENITH</h3>

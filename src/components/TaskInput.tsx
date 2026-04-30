@@ -31,6 +31,8 @@ export const TaskInput: React.FC<TaskInputProps> = ({ taskToEdit, isOpen, onOpen
   const [category, setCategory] = useState('');
   const [startTime, setStartTime] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
   const [reminderOffset, setReminderOffset] = useState<number>(0);
+  const [energyLevel, setEnergyLevel] = useState(3);
+  const [outputType, setOutputType] = useState('Creative');
 
   const open = isOpen !== undefined ? isOpen : internalOpen;
   const setOpen = onOpenChange || setInternalOpen;
@@ -42,10 +44,11 @@ export const TaskInput: React.FC<TaskInputProps> = ({ taskToEdit, isOpen, onOpen
       setCategory(taskToEdit.category);
       setStartTime(format(new Date(taskToEdit.startTime), "yyyy-MM-dd'T'HH:mm"));
       setReminderOffset(taskToEdit.reminderOffset || 0);
+      setEnergyLevel(taskToEdit.energyLevel || 3);
+      setOutputType(taskToEdit.outputType || 'Creative');
       setOpen(true);
     }
   }, [taskToEdit, setOpen]);
-
 
   const categories = mode === 'titan' ? TITAN_CATEGORIES : ZENITH_CATEGORIES;
 
@@ -68,6 +71,8 @@ export const TaskInput: React.FC<TaskInputProps> = ({ taskToEdit, isOpen, onOpen
       intensity: intensity[0],
       reminderOffset: reminderOffset > 0 ? reminderOffset : undefined,
       reminderSent: false,
+      energyLevel: mode === 'zenith' ? energyLevel : undefined,
+      outputType: mode === 'zenith' ? outputType : undefined,
     };
 
     if (isDemoMode) {
@@ -248,6 +253,42 @@ export const TaskInput: React.FC<TaskInputProps> = ({ taskToEdit, isOpen, onOpen
                       <span>Critical_Mass</span>
                    </div>
                 </div>
+
+                {mode === 'zenith' && (
+                  <div className="grid grid-cols-2 gap-4 border-t border-white/5 pt-4 mt-2">
+                    <div className="space-y-2">
+                      <label className="text-[10px] uppercase font-bold text-white/40 ml-1 tracking-widest flex items-center gap-2">
+                        Energy (1-5)
+                      </label>
+                      <div className="flex gap-1 h-12 items-center px-1">
+                        {[1, 2, 3, 4, 5].map(star => (
+                           <button
+                             key={star}
+                             type="button"
+                             onClick={() => setEnergyLevel(star)}
+                             className={`text-xl transition-all ${energyLevel >= star ? 'text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]' : 'text-white/10 hover:text-white/30'}`}
+                           >
+                             ★
+                           </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] uppercase font-bold text-white/40 ml-1 tracking-widest flex items-center gap-2">
+                        Output Type
+                      </label>
+                      <select 
+                         value={outputType}
+                         onChange={(e) => setOutputType(e.target.value)}
+                         className="w-full bg-white/5 border border-white/10 focus:border-cyan-neon/30 h-12 rounded-xl text-xs font-mono px-4 outline-none appearance-none"
+                      >
+                         {['Creative', 'Analytical', 'Communication', 'Learning'].map(type => (
+                           <option key={type} value={type} className="bg-obsidian text-white">{type}</option>
+                         ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex gap-4 pt-4">
                    <Button 

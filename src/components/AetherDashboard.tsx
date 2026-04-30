@@ -19,7 +19,7 @@ import { useNotificationSync } from "../services/notificationService";
 import { InhibitorWidget } from "./InhibitorWidget";
 import BodyMap from "./BodyMap";
 import { useState, useMemo, useEffect } from "react";
-import { format } from "date-fns";
+import { format, formatDistanceToNow, isPast } from "date-fns";
 import { getSupabase } from "../lib/supabase";
 
 import { AmbientVisualizer } from "./AmbientVisualizer";
@@ -33,6 +33,9 @@ import { useTaskReminders } from "../hooks/useTaskReminders";
 import { ToastNotifications } from "./ToastNotifications";
 import { TitanLeaderboard } from "./TitanLeaderboard";
 import { AetherStore } from "./AetherStore";
+import { FocusProtocol } from "./zenith/FocusProtocol";
+import { WeeklyAnalytics } from "./zenith/WeeklyAnalytics";
+import { SkillProgress } from "./zenith/SkillProgress";
 
 const CATEGORY_COLORS: Record<string, string> = {
   'Office Work': 'text-blue-400 border-blue-400/30 bg-blue-400/5',
@@ -48,20 +51,104 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 export default function AetherDashboard() {
-  const { mode, tasks, addTask, updateTask, deleteTask, updateUser, user, isDemoMode, resetMode } = useAetherStore();
+  const { mode, tasks, addTask, updateTask, deleteTask, setTasks, updateUser, user, isDemoMode, resetMode } = useAetherStore();
   const [taskToEdit, setTaskToEdit] = useState<AetherTask | null>(null);
   const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
   const [isTaskInputOpen, setIsTaskInputOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [activeNode, setActiveNode] = useState('07_WEEK');
+  const [taskFilter, setTaskFilter] = useState<'ALL' | 'PENDING' | 'ACTIVE' | 'COMPLETE'>('ALL');
   const [currentView, setCurrentView] = useState<'dashboard' | 'leaderboard' | 'store'>('dashboard');
+  const [zenithTab, setZenithTab] = useState<'WORKSPACE' | 'PROTOCOL' | 'ANALYTICS'>('WORKSPACE');
+  const [zenithState, setZenithState] = useState<'FLOW' | 'SCATTERED' | 'LOW_ENERGY' | 'FOCUSED'>('FLOW');
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => setTick(t => t + 1), 60000);
+    return () => clearInterval(timer);
+  }, []);
   
   const [isInsightsModalOpen, setIsInsightsModalOpen] = useState(false);
+
+  const showSystemToast = (msg: string) => {
+    const toast = document.createElement('div');
+    toast.className = 'fixed bottom-4 right-4 bg-white/10 backdrop-blur-md border border-white/20 text-white font-mono text-xs px-4 py-3 rounded-lg z-[100] animate-in slide-in-from-bottom-5';
+    toast.textContent = msg;
+    document.body.appendChild(toast);
+    setTimeout(() => {
+      toast.classList.add('animate-out', 'fade-out', 'slide-out-to-bottom-5');
+      setTimeout(() => toast.remove(), 300);
+    }, 3000);
+  };
+
+  const updateTaskStatus = async (taskId: string, newStatus: 'active' | 'complete') => {
+    updateTask(taskId, { status: newStatus });
+    
+    if (newStatus === 'complete') {
+      showSystemToast('PROTOCOL_COMPLETE ✓');
+      await addXP(taskId);
+    }
+    
+    if (!isDemoMode && user?.id) {
+      const { getSupabase } = await import('../lib/supabase');
+      const client = getSupabase();
+      if (client) {
+        await client.from('tasks').update({ status: newStatus }).eq('id', taskId).eq('user_id', user.id);
+      }
+    }
+  };
+
+  const addXP = async (taskId: string) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    
+    const xpAmount = task.mode === 'titan' ? 50 : 75;
+    const category = task.category;
+    
+    if (!isDemoMode && user?.id) {
+      const { getSupabase } = await import('../lib/supabase');
+      const client = getSupabase();
+      if (client) {
+        await client.from('user_xp').upsert({
+          user_id: user.id,
+          category: category,
+          mode: task.mode,
+          xp_points: xpAmount,
+          last_updated: new Date().toISOString()
+        }, {
+          onConflict: 'user_id,category,mode',
+          ignoreDuplicates: false
+        });
+      }
+    }
+  };
 
   useEffect(() => {
     if (isDemoMode) return;
     const client = getSupabase();
     if (!client || !user?.id) return;
+
+    const fetchTasks = async () => {
+      const { data, error } = await client.from('tasks').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
+      if (!error && data) {
+         console.log("Fetched Tasks from Supabase:", data);
+         const mappedTasks = data.map(dbT => ({
+           id: dbT.id,
+           title: dbT.title,
+           category: dbT.category,
+           mode: dbT.mode as any,
+           type: dbT.mode === 'titan' ? 'workout' : 'work' as any,
+           startTime: new Date(dbT.start_time).getTime(),
+           intensity: dbT.priority === 3 ? 80 : dbT.priority === 2 ? 50 : 20,
+           reminderOffset: dbT.tags?.includes('reminder') ? 15 : undefined,
+           reminderSent: false,
+           status: dbT.status || 'pending',
+           createdAt: new Date(dbT.created_at).getTime()
+         }));
+         setTasks(mappedTasks);
+      }
+    };
+    fetchTasks();
 
     const channel = client
       .channel('tasks-realtime')
@@ -72,9 +159,9 @@ export default function AetherDashboard() {
         filter: `user_id=eq.${user.id}`
       }, (payload) => {
         if (payload.eventType === 'INSERT') {
-          // Add to array
           const newTask = payload.new;
           addTask({
+            id: newTask.id,
             title: newTask.title,
             category: newTask.category,
             mode: newTask.mode as any,
@@ -82,16 +169,21 @@ export default function AetherDashboard() {
             startTime: new Date(newTask.start_time).getTime(),
             intensity: newTask.priority === 3 ? 80 : newTask.priority === 2 ? 50 : 20,
             reminderOffset: newTask.tags?.includes('reminder') ? 15 : undefined,
-            reminderSent: false
+            reminderSent: false,
+            status: newTask.status || 'pending',
+            createdAt: new Date(newTask.created_at).getTime()
           });
         } else if (payload.eventType === 'UPDATE') {
-          // Find local task. Real sync would require matching DB id, but we map fields here
-          // This is a simplified example as requested by prompt
           const updTask = payload.new;
-          // In a real scenario we'd track original DB ID in the Zustand state map. 
-          // For now, no update sync if ID doesn't match
+          updateTask(updTask.id, {
+            title: updTask.title,
+            category: updTask.category,
+            startTime: new Date(updTask.start_time).getTime(),
+            intensity: updTask.priority === 3 ? 80 : updTask.priority === 2 ? 50 : 20,
+            status: updTask.status,
+          });
         } else if (payload.eventType === 'DELETE') {
-          // Delete
+          deleteTask(payload.old.id);
         }
       })
       .subscribe();
@@ -108,14 +200,40 @@ export default function AetherDashboard() {
   useNotificationSync();
   useTaskReminders();
 
-  const accentColor = mode === 'titan' ? 'text-purple-neon' : 'text-cyan-neon';
-  const accentBg = mode === 'titan' ? 'bg-purple-neon' : 'bg-cyan-neon';
-
-  const relevantTasks = tasks.filter(t => t.mode === mode).slice(0, 5);
+  let accentColor = mode === 'titan' ? 'text-purple-neon' : 'text-cyan-neon';
+  let accentBg = mode === 'titan' ? 'bg-purple-neon' : 'bg-cyan-neon';
+  
+  if (mode === 'zenith') {
+    switch (zenithState) {
+      case 'FLOW': accentColor = 'text-cyan-400'; accentBg = 'bg-cyan-400'; break;
+      case 'SCATTERED': accentColor = 'text-amber-400'; accentBg = 'bg-amber-400'; break;
+      case 'LOW_ENERGY': accentColor = 'text-purple-400'; accentBg = 'bg-purple-400'; break;
+      case 'FOCUSED': accentColor = 'text-emerald-400'; accentBg = 'bg-emerald-400'; break;
+    }
+  }
 
   const getCategoryStyles = (cat?: string) => {
     return CATEGORY_COLORS[cat || ''] || 'text-white/40 border-white/10 bg-white/5';
   };
+
+  const filteredTasks = tasks.filter(t => {
+    if (t.mode !== mode) return false;
+    
+    const taskStatus = t.status || 'pending';
+    let effectiveStatus = taskStatus;
+    if (taskStatus === 'pending' && t.startTime && isPast(new Date(t.startTime))) {
+      effectiveStatus = 'overdue';
+    }
+
+    if (taskFilter === 'ALL') return true;
+    if (taskFilter === 'PENDING') return effectiveStatus === 'pending' || effectiveStatus === 'overdue';
+    if (taskFilter === 'ACTIVE') return effectiveStatus === 'active';
+    if (taskFilter === 'COMPLETE') return effectiveStatus === 'complete';
+    
+    return true;
+  });
+
+  const relevantTasks = filteredTasks.slice(0, 15);
 
   const handleGoHome = async () => {
     // Reset Zustand store state to show mode selection
@@ -134,12 +252,36 @@ export default function AetherDashboard() {
     }
   };
 
-  // Generate Neural ID based on user data
+  const handleSetZenithState = async (newState: 'FLOW' | 'SCATTERED' | 'LOW_ENERGY' | 'FOCUSED') => {
+    setZenithState(newState);
+    if (!isDemoMode && user?.id) {
+      const { getSupabase } = await import('../lib/supabase');
+      const client = getSupabase();
+      if (client) {
+        await client.from('zenith_sessions').insert({
+          user_id: user.id,
+          session_name: `State: ${newState}`,
+          skill_category: 'Mental State',
+          completed_at: new Date().toISOString(),
+          duration_minutes: 0
+        });
+      }
+    }
+  };
+
   const neuralId = useMemo(() => {
+    // If the backend or auth metadata provides the exact neural_id, use it.
+    if (user?.user_metadata?.neural_id) return user.user_metadata.neural_id;
+    if (user?.user_metadata?.username?.startsWith('@')) return user.user_metadata.username;
+    
+    // Fallback logic
     const rawName = user?.user_metadata?.username || user?.username || user?.email?.split('@')[0] || 'PILOT';
+    if (rawName.startsWith('PILOT_')) {
+      const code = rawName.split('_')[1];
+      return `@OXYGEN_${code}`;
+    }
     const cleanName = rawName.toUpperCase().replace(/[^A-Z0-9]/g, '');
     const gymName = user?.user_metadata?.gym_name ? user.user_metadata.gym_name.toUpperCase().replace(/[^A-Z0-9]/g, '') : 'OXYGEN';
-    // Use a consistent random-looking number based on name length or just a fixed string for demo
     const hash = (cleanName.length * 17) % 999;
     const digits = hash.toString().padStart(3, '0');
     return `@${gymName}_${cleanName}${digits}`;
@@ -295,7 +437,7 @@ export default function AetherDashboard() {
         <section className="col-span-1 lg:col-span-6 flex flex-col gap-4">
           <div className="flex-1 glass-panel-heavy p-4 lg:p-5 relative overflow-hidden flex flex-col min-h-[350px] lg:min-h-0">
             <div className="relative z-10 flex flex-col h-full">
-              <div className="flex flex-col md:flex-row justify-between items-start mb-4 lg:mb-5 gap-3">
+              <div className="flex flex-col md:flex-row justify-between items-start lg:items-center mb-3 lg:mb-4 gap-3">
                 <div>
                   <h2 className="text-xl lg:text-2xl font-light tracking-tighter mb-1 font-heading">
                     {mode === 'titan' ? 'Hyper-Trophy' : 'Cognitive'}{' '}
@@ -310,56 +452,215 @@ export default function AetherDashboard() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0">
-                <div className="space-y-6 max-h-full overflow-y-auto pr-2 custom-scrollbar">
-                  {relevantTasks.length > 0 ? relevantTasks.map((task, i) => (
-                    <motion.div 
-                      key={task.id}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.1 }}
-                      className={`p-5 bg-white/[0.03] border-l-2 ${accentColor} rounded-r-2xl hover:bg-white/[0.05] transition-all group flex flex-col gap-3`}
+              {/* Zenith Tabs or Task Filters */}
+              {mode === 'zenith' ? (
+                <div className="flex flex-col gap-4">
+                  <div className="flex gap-2 mb-2 overflow-x-auto custom-scrollbar pb-1">
+                    {(['WORKSPACE', 'PROTOCOL', 'ANALYTICS'] as const).map(tab => (
+                      <Button
+                        key={tab}
+                        variant="ghost"
+                        onClick={() => setZenithTab(tab)}
+                        className={`h-8 px-4 text-[10px] font-mono tracking-widest uppercase rounded-lg border ${
+                          zenithTab === tab 
+                            ? `${accentBg}/20 border-${accentColor}/50 ${accentColor}` 
+                            : 'border-white/10 text-white/40 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        {tab}
+                      </Button>
+                    ))}
+                  </div>
+                  {zenithTab === 'WORKSPACE' && (
+                    <div className="flex gap-2 overflow-x-auto custom-scrollbar pb-1 mb-2">
+                       {['FLOW', 'SCATTERED', 'LOW_ENERGY', 'FOCUSED'].map(state => (
+                         <Button
+                           key={state}
+                           variant="ghost"
+                           onClick={() => handleSetZenithState(state as any)}
+                           className={`h-6 px-3 text-[9px] font-mono tracking-widest uppercase rounded border ${
+                             zenithState === state 
+                               ? `${accentBg}/20 border-${accentColor}/50 ${accentColor}` 
+                               : 'border-white/10 text-white/40 hover:text-white hover:bg-white/5'
+                           }`}
+                         >
+                           {state.replace('_', ' ')}
+                         </Button>
+                       ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex gap-2 mb-4 overflow-x-auto custom-scrollbar pb-1">
+                  {['ALL', 'PENDING', 'ACTIVE', 'COMPLETE'].map(tab => (
+                    <Button
+                      key={tab}
+                      variant="ghost"
+                      onClick={() => setTaskFilter(tab as any)}
+                      className={`h-8 px-4 text-[10px] font-mono tracking-widest uppercase rounded-lg border ${
+                        taskFilter === tab 
+                          ? `${accentBg}/20 border-${accentColor}/50 ${accentColor}` 
+                          : 'border-white/10 text-white/40 hover:text-white hover:bg-white/5'
+                      }`}
                     >
-                      <div className="flex justify-between items-start">
-                        <div className="space-y-1">
-                          <div className={`px-2 py-0.5 border rounded text-[8px] font-bold uppercase tracking-tighter w-fit ${getCategoryStyles(task.category)}`}>
-                            {task.category || 'Legacy Node'}
-                          </div>
-                          <p className="text-lg md:text-xl font-bold break-words whitespace-normal leading-tight">{task.title}</p>
-                          <div className="flex items-center gap-2 text-[10px] text-white/30 font-mono">
-                            <Clock size={10} className={accentColor} />
-                            {task.startTime ? format(new Date(task.startTime), 'HH:mm | MMM dd') : 'No temporal log'}
-                          </div>
-                        </div>
-                        
-                        <div className="flex gap-1 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 hover:bg-white/10 text-white/40 hover:text-white"
-                            onClick={() => setTaskToEdit(task)}
-                          >
-                            <Edit2 size={12} />
-                          </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 hover:bg-red-500/20 text-white/40 hover:text-red-500"
-                            onClick={() => setTaskToDelete(task.id)}
-                          >
-                            <Trash2 size={12} />
-                          </Button>
-                        </div>
-                      </div>
+                      {tab}
+                    </Button>
+                  ))}
+                </div>
+              )}
 
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 h-1 bg-white/10 rounded-full overflow-hidden">
-                           <div className={`h-full ${accentBg} opacity-60`} style={{ width: `${task.intensity}%` }} />
+              <div className="flex-1 min-h-0 relative">
+                {mode === 'zenith' && zenithTab === 'PROTOCOL' && (
+                   <div className="absolute inset-0 bg-obsidian z-20 rounded-2xl border border-white/5 overflow-hidden">
+                      <FocusProtocol />
+                   </div>
+                )}
+                {mode === 'zenith' && zenithTab === 'ANALYTICS' && (
+                   <div className="absolute inset-0 bg-obsidian z-20 rounded-2xl grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      <WeeklyAnalytics />
+                      <SkillProgress />
+                   </div>
+                )}
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
+                <div className="space-y-6 max-h-full overflow-y-auto pr-2 custom-scrollbar">
+                  {relevantTasks.length > 0 ? relevantTasks.map((task, i) => {
+                    const st = task.status || 'pending';
+                    let effectiveStatus = st;
+                    if (st === 'pending' && task.startTime && isPast(new Date(task.startTime))) {
+                      effectiveStatus = 'overdue';
+                    }
+
+                    const isComplete = effectiveStatus === 'complete';
+                    const isActive = effectiveStatus === 'active';
+                    const isOverdue = effectiveStatus === 'overdue';
+                    const isPending = effectiveStatus === 'pending';
+                    
+                    let borderColor = accentColor;
+                    let badgeColor = 'text-amber-400 border-amber-400/30 bg-amber-400/10';
+                    let badgeText = 'PENDING';
+                    
+                    if (isComplete) {
+                      borderColor = 'border-green-500';
+                      badgeColor = 'text-green-400 border-green-400/30 bg-green-400/10';
+                      badgeText = 'COMPLETE';
+                    } else if (isActive) {
+                      borderColor = 'border-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.2)]';
+                      badgeColor = 'text-cyan-400 border-cyan-400/30 bg-cyan-400/10 animate-pulse';
+                      badgeText = 'ACTIVE';
+                    } else if (isOverdue) {
+                      borderColor = 'border-red-500';
+                      badgeColor = 'text-red-400 border-red-400/30 bg-red-400/10';
+                      badgeText = 'OVERDUE';
+                    } else {
+                      borderColor = 'border-amber-400';
+                    }
+
+                    let timeDisplay = 'No temporal log';
+                    if (task.startTime) {
+                      const dateObj = new Date(task.startTime);
+                      if (isComplete) {
+                        timeDisplay = `Completed at ${format(dateObj, 'h:mm a')}`;
+                      } else if (isActive) {
+                        timeDisplay = `Running for ${formatDistanceToNow(dateObj)}`;
+                      } else if (isOverdue) {
+                        timeDisplay = `Started ${formatDistanceToNow(dateObj)} ago`;
+                      } else {
+                        timeDisplay = `Starts in ${formatDistanceToNow(dateObj)}`;
+                      }
+                    }
+
+                    return (
+                      <motion.div 
+                        key={task.id}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.1 }}
+                        className={`p-5 bg-white/[0.03] border-l-2 ${borderColor} rounded-r-2xl transition-all group flex flex-col gap-3 ${isComplete ? 'opacity-50' : 'hover:bg-white/[0.05]'}`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="space-y-1.5 w-full">
+                            <div className="flex flex-wrap items-center gap-2 mb-1">
+                              <div className={`px-2 py-0.5 border rounded text-[8px] font-bold uppercase tracking-tighter w-fit ${getCategoryStyles(task.category)}`}>
+                                {task.category || 'Legacy Node'}
+                              </div>
+                              <div className={`px-2 py-0.5 border rounded text-[8px] font-mono font-bold tracking-widest uppercase w-fit ${badgeColor}`}>
+                                {badgeText}
+                              </div>
+                              {task.mode === 'zenith' && task.outputType && (
+                                <div className={`px-2 py-0.5 border rounded text-[8px] font-mono font-bold tracking-widest uppercase w-fit text-cyan-400 border-cyan-400/30 bg-cyan-400/10`}>
+                                  {task.outputType}
+                                </div>
+                              )}
+                              {task.mode === 'zenith' && task.energyLevel && (
+                                <div className={`px-2 py-0.5 border rounded text-[8px] font-mono font-bold tracking-widest uppercase w-fit text-white/60 border-white/20 bg-white/5 flex gap-0.5`}>
+                                  {[...Array(5)].map((_, idx) => (
+                                    <span key={idx} className={idx < (task.energyLevel || 0) ? 'text-cyan-400' : 'text-white/20'}>★</span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            <p className={`text-lg md:text-xl font-bold break-words whitespace-normal leading-tight ${isComplete ? 'line-through text-white/50' : ''}`}>{task.title}</p>
+                            <div className="flex items-center justify-between w-full">
+                              <div className="flex items-center gap-2 text-[10px] text-white/40 font-mono">
+                                <Clock size={10} className={isComplete ? 'text-white/40' : accentColor} />
+                                {timeDisplay}
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="flex gap-1 md:opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-2">
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 hover:bg-white/10 text-white/40 hover:text-white"
+                              onClick={() => setTaskToEdit(task)}
+                            >
+                              <Edit2 size={12} />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 hover:bg-red-500/20 text-white/40 hover:text-red-500"
+                              onClick={() => setTaskToDelete(task.id)}
+                            >
+                              <Trash2 size={12} />
+                            </Button>
+                          </div>
                         </div>
-                        <span className={`text-[10px] font-mono ${accentColor}`}>{task.intensity}%</span>
-                      </div>
-                    </motion.div>
-                  )) : (
+
+                        <div className="flex items-center gap-2 mt-1">
+                          <div className="flex-1 h-1 bg-white/10 rounded-full overflow-hidden">
+                             <div className={`h-full ${isComplete ? 'bg-green-500' : isActive ? 'bg-cyan-400' : accentBg} opacity-60`} style={{ width: `${task.intensity}%` }} />
+                          </div>
+                          <span className={`text-[10px] font-mono ${isComplete ? 'text-white/40' : accentColor}`}>{task.intensity}%</span>
+                        </div>
+
+                        {/* Action Buttons */}
+                        {!isComplete && (
+                          <div className="pt-2 mt-1 border-t border-white/5 flex gap-2">
+                            {isPending || isOverdue ? (
+                              <Button
+                                onClick={() => updateTaskStatus(task.id, 'active')}
+                                className="flex-1 h-8 bg-amber-400/10 text-amber-400 hover:bg-amber-400/20 border border-amber-400/20 text-[10px] font-mono tracking-widest"
+                              >
+                                ▶ START
+                              </Button>
+                            ) : null}
+                            
+                            {isActive || isOverdue ? (
+                              <Button
+                                onClick={() => updateTaskStatus(task.id, 'complete')}
+                                className={`flex-1 h-8 bg-cyan-400/10 text-cyan-400 hover:bg-cyan-400/20 border border-cyan-400/20 text-[10px] font-mono tracking-widest ${isActive ? 'animate-pulse' : ''}`}
+                              >
+                                ✓ COMPLETE
+                              </Button>
+                            ) : null}
+                          </div>
+                        )}
+                      </motion.div>
+                    );
+                  }) : (
                     <div className="p-8 border border-white/5 border-dashed rounded-3xl flex flex-col items-center justify-center text-center opacity-40">
                        <Zap className="w-8 h-8 mb-3 text-white/20" />
                        <p className="text-[10px] uppercase font-bold tracking-widest">No active protocols</p>
@@ -371,6 +672,7 @@ export default function AetherDashboard() {
                 <div className="h-64 lg:h-full overflow-hidden mt-4 lg:mt-0">
                   {mode === 'titan' ? <BodyMap /> : <InhibitorWidget mode={mode} />}
                 </div>
+              </div>
               </div>
             </div>
 

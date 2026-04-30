@@ -42,6 +42,16 @@ export default function App() {
         const session = await Promise.race([authService.getSession(), timeoutPromise]) as any;
         setSession(session);
         setUser(session?.user ?? null);
+        
+        if (session?.user && useAetherStore.getState().currentScreen === 'mode-selection' && !useAetherStore.getState().activeMode) {
+          const role = session.user.user_metadata?.role || 'individual';
+          if (role === 'individual') {
+            useAetherStore.getState().setMode('zenith');
+          } else if (role === 'pilot') {
+            useAetherStore.getState().setMode('titan');
+          }
+        }
+        
         setLoading(false);
       } catch (err: any) {
         console.error("Failed to get session:", err);
@@ -53,9 +63,19 @@ export default function App() {
     fetchSessionWithTimeout();
 
     // Listen for auth changes
-    const { data: { subscription } } = authService.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = authService.onAuthStateChange((event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
+      
+      if (event === 'SIGNED_IN' && session?.user) {
+        const role = session.user.user_metadata?.role || 'individual';
+        if (role === 'individual') {
+          useAetherStore.getState().setMode('zenith');
+        } else if (role === 'pilot') {
+          useAetherStore.getState().setMode('titan');
+        }
+      }
+      
       setLoading(false);
     });
 
