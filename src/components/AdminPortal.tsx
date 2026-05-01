@@ -88,7 +88,7 @@ export const AdminPortal: React.FC = () => {
       // Problem 2: Users Table Fix
       const { data: profiles, error: profileErr } = await supabaseAdmin
         .from('profiles')
-        .select('*, gyms(id, name, pilot_code)')
+        .select('*, gyms(id, gym_name, pilot_code)')
         .neq('role', 'super_admin')
         .order('created_at', { ascending: false });
 
@@ -111,9 +111,9 @@ export const AdminPortal: React.FC = () => {
          
          const mappedOwners = ownerProfiles.map(o => ({
             ...o,
-            gymName: o.gyms?.[0]?.name || 'No Gym',
-            pilotCode: o.gyms?.[0]?.pilot_code || 'N/A',
-            memberCount: o.gyms?.[0]?.id ? (membersCountMap.get(o.gyms[0].id) || 0) : 0
+            gymName: o.gyms?.gym_name || o.gyms?.[0]?.gym_name || 'No Gym',
+            pilotCode: o.gyms?.pilot_code || o.gyms?.[0]?.pilot_code || 'N/A',
+            memberCount: o.gyms?.id ? (membersCountMap.get(o.gyms.id) || 0) : (o.gyms?.[0]?.id ? (membersCountMap.get(o.gyms[0].id) || 0) : 0)
          }));
          
          setGymOwners(mappedOwners);
@@ -122,7 +122,7 @@ export const AdminPortal: React.FC = () => {
       const { data: qs } = await supabaseAdmin.from('user_queries').select('*, profiles(neural_id, username)').order('created_at', { ascending: false });
       if (qs) setQueries(qs);
       
-      const { data: ls } = await supabaseAdmin.from('store_listings').select('*, profiles(neural_id, username), gyms(name)').order('created_at', { ascending: false });
+      const { data: ls } = await supabaseAdmin.from('store_listings').select('*, profiles(neural_id, username), gyms(gym_name)').order('created_at', { ascending: false });
       if (ls) setListings(ls);
 
     } catch (e: any) {
@@ -459,7 +459,7 @@ export const AdminPortal: React.FC = () => {
                             <div className="font-bold text-white tracking-wider">{l.product_name}</div>
                             <div className="text-white/30 text-[9px]">by {l.profiles?.neural_id}</div>
                           </td>
-                          <td className="py-4 text-[#deff9a] font-bold">{l.gyms?.name || 'Local'}</td>
+                          <td className="py-4 text-[#deff9a] font-bold">{l.gyms?.gym_name || l.gyms?.[0]?.gym_name || 'Local'}</td>
                           <td className="py-4 font-mono text-xl tracking-tighter">₹{l.price}</td>
                           <td className="py-4 text-white/50">{l.category}</td>
                           <td className="py-4 text-white/30 text-[10px]">{new Date(l.created_at).toLocaleDateString()}</td>

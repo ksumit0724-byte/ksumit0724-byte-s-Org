@@ -36,7 +36,7 @@ export const AetherStore: React.FC = () => {
         .select(`
           *,
           profiles(neural_id, gym_id),
-          gyms(name)
+          gyms(gym_name)
         `)
         .eq('is_active', true)
         .order('created_at', { ascending: false });
@@ -239,7 +239,7 @@ export const AetherStore: React.FC = () => {
                   {product.category}
                 </span>
                 <span className="text-xs font-mono text-white/40 uppercase truncate max-w-[120px]">
-                  {product.gyms?.name || 'Local Gym'}
+                  {product.gyms?.gym_name || product.gyms?.[0]?.gym_name || 'Local Gym'}
                 </span>
               </div>
               
@@ -247,7 +247,7 @@ export const AetherStore: React.FC = () => {
               <div className="text-xl font-mono tracking-tighter text-white mb-4">₹{product.price}</div>
               
               <button 
-                onClick={() => alert(`Contact Seller:\n${product.contact_info || product.gyms?.name || 'Inquire at gym desk'}`)}
+                onClick={() => alert(`Contact Seller:\n${product.contact_info || product.gyms?.gym_name || product.gyms?.[0]?.gym_name || 'Inquire at gym desk'}`)}
                 className="mt-auto w-full py-3 rounded-lg border border-[#deff9a]/30 text-[#deff9a] font-black tracking-widest uppercase text-[10px] hover:bg-[#deff9a] hover:text-black transition-all flex items-center justify-center gap-2 group-hover:shadow-[0_0_15px_rgba(222,255,154,0.2)]"
               >
                 <Mail className="w-3.5 h-3.5" />
