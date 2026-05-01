@@ -14,6 +14,18 @@ const sanitizeKey = (key: any) => {
 export const supabaseUrl = sanitizeKey(supabaseUrlRaw);
 export const supabaseKey = sanitizeKey(supabaseKeyRaw);
 
+const supabaseServiceRoleKeyRaw = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
+export const supabaseServiceRoleKey = sanitizeKey(supabaseServiceRoleKeyRaw);
+
+export const supabaseAdmin = (supabaseUrl && supabaseServiceRoleKey && supabaseUrl !== 'undefined' && supabaseServiceRoleKey !== 'undefined')
+  ? createClient(supabaseUrl, supabaseServiceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    })
+  : null;
+
 export const isSupabaseConfigured = Boolean(
   supabaseUrl && 
   supabaseKey && 

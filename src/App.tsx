@@ -198,7 +198,15 @@ export default function App() {
 
   // Check if route is /admin-sumit-portal (client-side simple routing mechanism)
   if (window.location.pathname === '/admin-sumit-portal') {
-    return <AdminPortal />;
+    const email = session?.user?.email || user?.email;
+    const role = (session?.user?.user_metadata?.role || user?.user_metadata?.role || user?.role || '').toLowerCase();
+    
+    if (email === 'ksumit0724@gmail.com' || role === 'super_admin') {
+      return <AdminPortal />;
+    } else {
+      window.location.href = '/';
+      return null;
+    }
   }
 
   return (
