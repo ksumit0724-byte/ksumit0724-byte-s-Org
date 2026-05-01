@@ -8,7 +8,7 @@ import { Badge } from "./ui/badge";
 import { getSupabase } from "../lib/supabase";
 
 export default function ModeSelection() {
-  const { setMode, updateUser, user, isDemoMode } = useAetherStore();
+  const { setMode, updateUser, user, isDemoMode, activeMode } = useAetherStore();
   const userRole = (user?.role || user?.user_metadata?.role || 'individual').toLowerCase();
   
   const isGymOwner = userRole === 'owner' || userRole === 'gym_owner';
@@ -96,9 +96,14 @@ export default function ModeSelection() {
         <motion.div
           whileHover={canAccessTitan ? { scale: 1.02 } : {}}
           whileTap={canAccessTitan ? { scale: 0.98 } : {}}
-          className={`glass-panel p-8 md:p-12 flex flex-col items-center gap-6 md:gap-8 group relative overflow-visible transition-all cursor-pointer border hover:border-purple-neon/40 bg-white/[0.02] ${!canAccessTitan ? 'border-white/5 opacity-40 grayscale' : 'border-white/5'} ${glitchTitan ? 'glitch-effect' : ''}`}
+          className={`glass-panel p-8 md:p-12 flex flex-col items-center gap-6 md:gap-8 group relative overflow-visible transition-all cursor-pointer border hover:border-purple-neon/40 bg-white/[0.02] ${!canAccessTitan ? 'border-white/5 opacity-40 grayscale' : activeMode === 'titan' ? 'border-purple-neon shadow-[0_0_20px_rgba(188,19,254,0.3)]' : 'border-white/5'} ${glitchTitan ? 'glitch-effect' : ''}`}
           onClick={() => handleSelect('titan')}
         >
+          {activeMode === 'titan' && (
+            <div className="absolute -top-3 -right-3 z-50">
+              <Badge className="bg-purple-neon text-black font-black uppercase tracking-widest text-[10px] animate-pulse">ACTIVE</Badge>
+            </div>
+          )}
           {showErrorTitan && !canAccessTitan && (
             <motion.div 
               initial={{ opacity: 0, y: 10 }}
@@ -136,9 +141,14 @@ export default function ModeSelection() {
         <motion.div
           whileHover={canAccessZenith ? { scale: 1.02 } : {}}
           whileTap={canAccessZenith ? { scale: 0.98 } : {}}
-          className={`glass-panel p-8 md:p-12 flex flex-col items-center gap-6 md:gap-8 group relative overflow-visible transition-all cursor-pointer border hover:border-cyan-neon/40 bg-white/[0.02] ${!canAccessZenith ? 'border-white/5 opacity-40 grayscale' : 'border-white/5'} ${glitchZenith ? 'glitch-effect' : ''}`}
+          className={`glass-panel p-8 md:p-12 flex flex-col items-center gap-6 md:gap-8 group relative overflow-visible transition-all cursor-pointer border hover:border-cyan-neon/40 bg-white/[0.02] ${!canAccessZenith ? 'border-white/5 opacity-40 grayscale' : activeMode === 'zenith' ? 'border-cyan-neon shadow-[0_0_20px_rgba(0,243,255,0.3)]' : 'border-white/5'} ${glitchZenith ? 'glitch-effect' : ''}`}
           onClick={() => handleSelect('zenith')}
         >
+          {activeMode === 'zenith' && (
+            <div className="absolute -top-3 -right-3 z-50">
+              <Badge className="bg-cyan-neon text-black font-black uppercase tracking-widest text-[10px] animate-pulse">ACTIVE</Badge>
+            </div>
+          )}
           {showErrorZenith && !canAccessZenith && (
             <motion.div 
               initial={{ opacity: 0, y: 10 }}

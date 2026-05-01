@@ -171,16 +171,29 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
             </div>
           </div>
 
-          {userRole === 'gym_owner' && (
+          {(userRole === 'gym_owner' || userRole === 'owner') && (
             <div className="space-y-3 p-4 bg-purple-neon/5 rounded-xl border border-purple-neon/20">
-              <h4 className="text-[10px] uppercase font-bold text-purple-neon tracking-widest text-center">Facility Operations</h4>
-              <div className="bg-black/40 border border-white/10 rounded-lg p-3 text-center space-y-2">
+              <h4 className="text-[10px] md:text-xs uppercase font-bold text-purple-neon tracking-widest text-center flex items-center justify-center gap-2">
+                 <Shield className="w-3 h-3 md:w-4 md:h-4" /> FACILITY COMMAND CENTER
+              </h4>
+              <div className="bg-black/40 border border-white/10 rounded-lg p-3 text-center space-y-2 mb-3">
                  <p className="text-[10px] text-white/40 uppercase font-mono">YOUR PILOT CODE</p>
                  <div className="flex justify-center items-center gap-2">
                    <Key className="text-purple-neon w-4 h-4" />
                    <span className="text-xl font-bold tracking-[0.2em]">{pilotCode || '...'}</span>
                  </div>
                  <p className="text-[9px] text-white/30 italic">Members use this code to register under this gym.</p>
+              </div>
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                 <Button className="bg-white/5 border border-white/10 text-white hover:bg-white/10 h-10 text-[9px] font-bold uppercase tracking-widest px-2">Member Dir</Button>
+                 <Button className="bg-white/5 border border-white/10 text-white hover:bg-white/10 h-10 text-[9px] font-bold uppercase tracking-widest px-2">Requests</Button>
+                 <Button className="bg-white/5 border border-white/10 text-white hover:bg-white/10 h-10 text-[9px] font-bold uppercase tracking-widest px-2">Gym Settings</Button>
+                 <Button className="bg-[#deff9a]/10 border border-[#deff9a]/30 text-[#deff9a] hover:bg-[#deff9a]/20 h-10 text-[9px] font-bold uppercase tracking-widest px-2" onClick={() => {
+                   onClose();
+                   // Wait for dashboard to close setting and trigger store.
+                   // we don't have access to setCurrentView here easily unless passed down or via store.
+                   // Actually we can add currentView to AetherStore if needed.
+                 }}>Store Listings</Button>
               </div>
             </div>
           )}

@@ -2,12 +2,11 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { 
   Home, 
-  Laptop, 
-  Dumbbell, 
   Plus, 
-  MoreHorizontal,
+  Settings,
   Trophy,
-  ShoppingBag
+  ShoppingBag,
+  HelpCircle
 } from 'lucide-react';
 import { useAetherStore } from '../store/useAetherStore';
 
@@ -15,8 +14,8 @@ interface GlobalNavbarProps {
   onAddClick: () => void;
   onHomeClick: () => void;
   onSettingsClick: () => void;
-  currentView: 'dashboard' | 'leaderboard' | 'store';
-  setCurrentView: (view: 'dashboard' | 'leaderboard' | 'store') => void;
+  currentView: 'dashboard' | 'leaderboard' | 'store' | 'help';
+  setCurrentView: (view: 'dashboard' | 'leaderboard' | 'store' | 'help') => void;
 }
 
 export const GlobalNavbar: React.FC<GlobalNavbarProps> = ({ 
@@ -26,7 +25,7 @@ export const GlobalNavbar: React.FC<GlobalNavbarProps> = ({
   currentView,
   setCurrentView
 }) => {
-  const { mode, setMode } = useAetherStore();
+  const { mode } = useAetherStore();
   const isTitan = mode === 'titan';
   
   return (
@@ -91,7 +90,17 @@ export const GlobalNavbar: React.FC<GlobalNavbarProps> = ({
             className="p-2 text-white/40 hover:text-white transition-colors rounded-full flex items-center justify-center cursor-pointer relative z-10"
             title="Settings"
           >
-            <MoreHorizontal className="w-5 h-5 md:w-6 md:h-6" />
+            <Settings className="w-5 h-5 md:w-6 md:h-6" />
+          </motion.button>
+          
+          <motion.button
+            onClick={() => setCurrentView('help')}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            className={`p-2 transition-colors rounded-full flex items-center justify-center cursor-pointer relative z-10 ${currentView === 'help' ? 'text-[#deff9a] bg-[#deff9a]/10' : 'text-white/40 hover:text-white'}`}
+            title="Help"
+          >
+            <HelpCircle className="w-5 h-5 md:w-6 md:h-6" />
           </motion.button>
         </div>
       </div>

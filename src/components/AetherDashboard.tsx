@@ -36,6 +36,9 @@ import { AetherStore } from "./AetherStore";
 import { FocusProtocol } from "./zenith/FocusProtocol";
 import { WeeklyAnalytics } from "./zenith/WeeklyAnalytics";
 import { SkillProgress } from "./zenith/SkillProgress";
+import { HelpView } from "./HelpView";
+import { QueryModal } from "./QueryModal";
+import { HelpCircle } from "lucide-react";
 
 const CATEGORY_COLORS: Record<string, string> = {
   'Office Work': 'text-blue-400 border-blue-400/30 bg-blue-400/5',
@@ -58,7 +61,8 @@ export default function AetherDashboard() {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [activeNode, setActiveNode] = useState('07_WEEK');
   const [taskFilter, setTaskFilter] = useState<'ALL' | 'PENDING' | 'ACTIVE' | 'COMPLETE'>('ALL');
-  const [currentView, setCurrentView] = useState<'dashboard' | 'leaderboard' | 'store'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'leaderboard' | 'store' | 'help'>('dashboard');
+  const [isQueryModalOpen, setIsQueryModalOpen] = useState(false);
   const [zenithTab, setZenithTab] = useState<'WORKSPACE' | 'PROTOCOL' | 'ANALYTICS'>('WORKSPACE');
   const [zenithState, setZenithState] = useState<'FLOW' | 'SCATTERED' | 'LOW_ENERGY' | 'FOCUSED'>('FLOW');
   const [, setTick] = useState(0);
@@ -269,23 +273,46 @@ export default function AetherDashboard() {
     }
   };
 
-  const neuralId = useMemo(() => {
-    // If the backend or auth metadata provides the exact neural_id, use it.
-    if (user?.user_metadata?.neural_id) return user.user_metadata.neural_id;
-    if (user?.user_metadata?.username?.startsWith('@')) return user.user_metadata.username;
-    
-    // Fallback logic
-    const rawName = user?.user_metadata?.username || user?.username || user?.email?.split('@')[0] || 'PILOT';
-    if (rawName.startsWith('PILOT_')) {
-      const code = rawName.split('_')[1];
-      return `@OXYGEN_${code}`;
-    }
-    const cleanName = rawName.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    const gymName = user?.user_metadata?.gym_name ? user.user_metadata.gym_name.toUpperCase().replace(/[^A-Z0-9]/g, '') : 'OXYGEN';
-    const hash = (cleanName.length * 17) % 999;
-    const digits = hash.toString().padStart(3, '0');
-    return `@${gymName}_${cleanName}${digits}`;
-  }, [user]);
+  const [neuralIdStr, setNeuralIdStr] = useState<string>('AETHER_GUEST');
+  const [totalXp, setTotalXp] = useState<number>(0);
+
+  useEffect(() => {
+    const fetchUserData = async () => {
+      if (isDemoMode || !user?.id) return;
+      try {
+        const { getSupabase } = await import('../lib/supabase');
+        const client = getSupabase();
+        if (!client) return;
+        
+        // Fetch neural ID
+        const { data: profile } = await client
+          .from('profiles')
+          .select('neural_id, username')
+          .eq('id', user.id)
+          .single();
+          
+        if (profile) {
+          setNeuralIdStr(profile.neural_id || profile.username || 'AETHER_GUEST');
+        }
+
+        // Fetch XP
+        const { data: xpData } = await client
+          .from('user_xp')
+          .select('xp_points')
+          .eq('user_id', user.id);
+          
+        if (xpData) {
+          const sum = xpData.reduce((acc, curr) => acc + (curr.xp_points || 0), 0);
+          setTotalXp(sum);
+        }
+      } catch (err) {
+        console.error("Error fetching user stats:", err);
+      }
+    };
+    fetchUserData();
+  }, [user, isDemoMode]);
+
+  // Remove the old calculate neuralId logic since we fetch it now.
   
   const isVerified = user?.user_metadata?.is_verified === true || true; // Mock true for demo
 
@@ -375,9 +402,15 @@ export default function AetherDashboard() {
                  <User className="w-2 h-2 text-cyan-neon" />
                </div>
              )}
-             <span className="text-[10px] md:text-xs font-mono text-[#deff9a] font-bold tracking-wider truncate">{neuralId}</span>
+             <span className="text-[10px] md:text-xs font-mono text-[#deff9a] font-bold tracking-wider truncate">{neuralIdStr}</span>
              {isVerified && <ShieldCheck className="w-3 md:w-3.5 h-3 md:h-3.5 text-[#deff9a] shrink-0" />}
           </div>
+          
+          <div className="flex items-center justify-center gap-1 md:gap-2 px-2 md:px-3 py-1.5 rounded-xl border border-[#deff9a]/30 bg-[#deff9a]/10 backdrop-blur-sm shrink-0">
+             <Zap className="w-3 h-3 md:w-3.5 md:h-3.5 text-[#deff9a]" />
+             <span className="text-[10px] md:text-xs font-mono text-[#deff9a] font-bold tracking-wider">{totalXp.toLocaleString()} XP</span>
+          </div>
+          
           <div className="h-6 w-[1px] bg-white/10 hidden md:block shrink-0" />
           <div className="flex flex-col items-center shrink-0">
             <Bell size={18} className="text-white/40 hover:text-white transition-colors cursor-pointer w-4 h-4 md:w-5 md:h-5" />
@@ -758,7 +791,24 @@ export default function AetherDashboard() {
         {currentView === 'store' && (
           <AetherStore key="store" />
         )}
+        
+        {currentView === 'help' && (
+          <HelpView key="help" />
+        )}
       </AnimatePresence>
+
+      {/* Floating Query Button */}
+      <button 
+        onClick={() => setIsQueryModalOpen(true)}
+        className="fixed bottom-24 right-6 md:right-8 w-12 h-12 rounded-full bg-purple-neon text-black flex items-center justify-center shadow-[0_0_20px_rgba(188,19,254,0.6)] hover:scale-110 transition-transform z-50 animate-pulse"
+      >
+        <span className="font-bold text-xl">?</span>
+      </button>
+
+      <QueryModal 
+        isOpen={isQueryModalOpen}
+        onClose={() => setIsQueryModalOpen(false)}
+      />
     </div>
   );
 }
