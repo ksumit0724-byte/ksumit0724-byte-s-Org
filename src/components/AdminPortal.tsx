@@ -133,46 +133,57 @@ export const AdminPortal: React.FC = () => {
     }
   };
 
+  const ensureAdminConfig = () => {
+    if (!supabaseAdmin) {
+      alert("CRITICAL ERROR: VITE_SUPABASE_SERVICE_ROLE_KEY is perfectly missing from your environment variables. Admin capabilities are locked.");
+      return false;
+    }
+    return true;
+  };
+
+  const handleAdminAction = async (actionFn: () => Promise<{ error: any }>) => {
+    if (!ensureAdminConfig()) return;
+    try {
+      const { error } = await actionFn();
+      if (error) {
+        console.error("Admin Action Error:", error);
+        alert(`Action failed: ${error.message}`);
+      } else {
+        fetchData();
+      }
+    } catch (e: any) {
+      console.error("Admin Action Exception:", e);
+      alert(`Action failed: ${e.message}`);
+    }
+  };
+
   const setGymOwnerVerification = async (id: string, is_verified: boolean) => {
-    if (!supabaseAdmin) return;
-    await supabaseAdmin.from('profiles').update({ is_verified }).eq('id', id);
-    fetchData();
+    await handleAdminAction(() => supabaseAdmin!.from('profiles').update({ is_verified }).eq('id', id));
   };
 
   const deleteUser = async (id: string) => {
-    if (!supabaseAdmin || !window.confirm("Delete this user permanently?")) return;
-    await supabaseAdmin.auth.admin.deleteUser(id);
-    fetchData();
+    if (!window.confirm("Delete this user permanently?")) return;
+    await handleAdminAction(() => supabaseAdmin!.auth.admin.deleteUser(id));
   };
   
   const updateRole = async (id: string, newRole: string) => {
-    if (!supabaseAdmin) return;
-    await supabaseAdmin.from('profiles').update({ role: newRole }).eq('id', id);
-    fetchData();
+    await handleAdminAction(() => supabaseAdmin!.from('profiles').update({ role: newRole }).eq('id', id));
   };
 
   const updateQueryStatus = async (id: string, status: string) => {
-    if (!supabaseAdmin) return;
-    await supabaseAdmin.from('user_queries').update({ status }).eq('id', id);
-    fetchData();
+    await handleAdminAction(() => supabaseAdmin!.from('user_queries').update({ status }).eq('id', id));
   };
 
   const deleteQuery = async (id: string) => {
-    if (!supabaseAdmin) return;
-    await supabaseAdmin.from('user_queries').delete().eq('id', id);
-    fetchData();
+    await handleAdminAction(() => supabaseAdmin!.from('user_queries').delete().eq('id', id));
   };
 
   const updateListingStatus = async (id: string, is_active: boolean) => {
-    if (!supabaseAdmin) return;
-    await supabaseAdmin.from('store_listings').update({ is_active }).eq('id', id);
-    fetchData();
+    await handleAdminAction(() => supabaseAdmin!.from('store_listings').update({ is_active }).eq('id', id));
   };
 
   const deleteListing = async (id: string) => {
-    if (!supabaseAdmin) return;
-    await supabaseAdmin.from('store_listings').delete().eq('id', id);
-    fetchData();
+    await handleAdminAction(() => supabaseAdmin!.from('store_listings').delete().eq('id', id));
   };
 
   const getRoleBadge = (r: string) => {

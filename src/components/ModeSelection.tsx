@@ -8,16 +8,15 @@ import { Badge } from "./ui/badge";
 import { getSupabase } from "../lib/supabase";
 
 export default function ModeSelection() {
-  const { setMode, updateUser, user, isDemoMode, activeMode } = useAetherStore();
+  const { setMode, updateUser, user, isDemoMode, activeMode, mode } = useAetherStore();
   const userRole = (user?.role || user?.user_metadata?.role || 'individual').toLowerCase();
   
   const isGymOwner = userRole === 'owner' || userRole === 'gym_owner';
   const isPilot = userRole === 'pilot';
-  const isIndividual = userRole === 'individual';
   const isSuperAdmin = userRole === 'super_admin';
 
-  const canAccessTitan = isGymOwner || isPilot || isSuperAdmin;
-  const canAccessZenith = isIndividual || isSuperAdmin;
+  const canAccessTitan = isGymOwner || isPilot || isSuperAdmin || isDemoMode;
+  const canAccessZenith = true;
 
   const [glitchTitan, setGlitchTitan] = useState(false);
   const [showErrorTitan, setShowErrorTitan] = useState(false);
@@ -96,11 +95,11 @@ export default function ModeSelection() {
         <motion.div
           whileHover={canAccessTitan ? { scale: 1.02 } : {}}
           whileTap={canAccessTitan ? { scale: 0.98 } : {}}
-          className={`glass-panel p-8 md:p-12 flex flex-col items-center gap-6 md:gap-8 group relative overflow-visible transition-all cursor-pointer border hover:border-purple-neon/40 bg-white/[0.02] ${!canAccessTitan ? 'border-white/5 opacity-40 grayscale' : activeMode === 'titan' ? 'border-purple-neon shadow-[0_0_20px_rgba(188,19,254,0.3)]' : 'border-white/5'} ${glitchTitan ? 'glitch-effect' : ''}`}
+          className={`glass-panel p-8 md:p-12 flex flex-col items-center gap-6 md:gap-8 group relative overflow-visible transition-all cursor-pointer border hover:border-purple-neon/40 bg-white/[0.02] ${!canAccessTitan ? 'border-white/5 opacity-30 grayscale saturate-0 contrast-75 hover:opacity-50' : activeMode === 'titan' ? 'border-purple-neon shadow-[0_0_30px_rgba(188,19,254,0.6)] bg-purple-neon/10' : 'border-white/5'} ${glitchTitan ? 'glitch-effect' : ''}`}
           onClick={() => handleSelect('titan')}
         >
           {activeMode === 'titan' && (
-            <div className="absolute -top-3 -right-3 z-50">
+            <div className="absolute top-4 right-4 z-50">
               <Badge className="bg-purple-neon text-black font-black uppercase tracking-widest text-[10px] animate-pulse">ACTIVE</Badge>
             </div>
           )}
@@ -119,7 +118,7 @@ export default function ModeSelection() {
           <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
             <Dumbbell className="w-24 h-24 -mr-8 -mt-8" />
           </div>
-          <div className={`w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center transition-colors border relative ${glitchTitan && !canAccessTitan ? 'bg-red-500/10 border-red-500/30' : 'bg-purple-neon/10 group-hover:bg-purple-neon/20 border-purple-neon/20'}`}>
+          <div className={`w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center transition-colors border relative ${glitchTitan && !canAccessTitan ? 'bg-red-500/10 border-red-500/30' : 'bg-purple-neon/10 group-hover:bg-purple-neon/20 border-purple-neon/50 shadow-[0_0_30px_rgba(188,19,254,0.6)]'}`}>
             <Dumbbell className={`w-8 h-8 md:w-10 md:h-10 ${glitchTitan && !canAccessTitan ? 'text-red-500' : 'text-purple-neon'}`} />
             {!canAccessTitan && (
               <div className="absolute -bottom-2 -right-2 bg-red-500/20 border border-red-500/50 p-1.5 rounded-full backdrop-blur-md">
@@ -141,11 +140,11 @@ export default function ModeSelection() {
         <motion.div
           whileHover={canAccessZenith ? { scale: 1.02 } : {}}
           whileTap={canAccessZenith ? { scale: 0.98 } : {}}
-          className={`glass-panel p-8 md:p-12 flex flex-col items-center gap-6 md:gap-8 group relative overflow-visible transition-all cursor-pointer border hover:border-cyan-neon/40 bg-white/[0.02] ${!canAccessZenith ? 'border-white/5 opacity-40 grayscale' : activeMode === 'zenith' ? 'border-cyan-neon shadow-[0_0_20px_rgba(0,243,255,0.3)]' : 'border-white/5'} ${glitchZenith ? 'glitch-effect' : ''}`}
+          className={`glass-panel p-8 md:p-12 flex flex-col items-center gap-6 md:gap-8 group relative overflow-visible transition-all cursor-pointer border hover:border-cyan-neon/40 bg-white/[0.02] ${!canAccessZenith ? 'border-white/5 opacity-30 grayscale saturate-0 contrast-75 hover:opacity-50' : activeMode === 'zenith' ? 'border-cyan-neon shadow-[0_0_30px_rgba(0,243,255,0.6)] bg-cyan-neon/10' : 'border-white/5'} ${glitchZenith ? 'glitch-effect' : ''}`}
           onClick={() => handleSelect('zenith')}
         >
           {activeMode === 'zenith' && (
-            <div className="absolute -top-3 -right-3 z-50">
+            <div className="absolute top-4 right-4 z-50">
               <Badge className="bg-cyan-neon text-black font-black uppercase tracking-widest text-[10px] animate-pulse">ACTIVE</Badge>
             </div>
           )}
@@ -164,7 +163,7 @@ export default function ModeSelection() {
           <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
             <Laptop className="w-24 h-24 -mr-8 -mt-8" />
           </div>
-          <div className={`w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center transition-colors border relative ${glitchZenith && !canAccessZenith ? 'bg-red-500/10 border-red-500/30' : 'bg-cyan-neon/10 group-hover:bg-cyan-neon/20 border-cyan-neon/20'}`}>
+          <div className={`w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center transition-colors border relative ${glitchZenith && !canAccessZenith ? 'bg-red-500/10 border-red-500/30' : 'bg-cyan-neon/10 group-hover:bg-cyan-neon/20 border-cyan-neon/50 shadow-[0_0_30px_rgba(0,243,255,0.6)]'}`}>
             <Laptop className={`w-8 h-8 md:w-10 md:h-10 ${glitchZenith && !canAccessZenith ? 'text-red-500' : 'text-cyan-neon'}`} />
             {!canAccessZenith && (
               <div className="absolute -bottom-2 -right-2 bg-red-500/20 border border-red-500/50 p-1.5 rounded-full backdrop-blur-md">

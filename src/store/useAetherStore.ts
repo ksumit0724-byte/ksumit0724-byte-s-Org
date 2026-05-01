@@ -69,7 +69,7 @@ export const useAetherStore = create<AetherState>()(
       activeMode: null,
       currentScreen: 'mode-selection',
       setMode: (mode) => set({ mode, activeMode: mode, currentScreen: 'dashboard' }),
-      resetMode: () => set({ activeMode: null, currentScreen: 'mode-selection' }),
+      resetMode: () => set({ currentScreen: 'mode-selection' }),
       setTheme: (theme) => set({ theme }),
       setUser: (user) => set({ user }),
       setSession: (session) => set({ session }),
@@ -126,7 +126,9 @@ export const useAetherStore = create<AetherState>()(
         tasks: state.tasks,
         isDemoMode: state.isDemoMode,
         user: state.user,
-        session: state.session
+        session: state.session,
+        activeMode: state.activeMode,
+        currentScreen: state.currentScreen
       }),
     }
   )

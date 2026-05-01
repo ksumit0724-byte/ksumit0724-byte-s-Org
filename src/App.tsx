@@ -68,11 +68,13 @@ export default function App() {
       setUser(session?.user ?? null);
       
       if (event === 'SIGNED_IN' && session?.user) {
-        const role = (session.user.user_metadata?.role || 'individual').toLowerCase();
-        if (role === 'individual') {
-          useAetherStore.getState().setMode('zenith');
-        } else if (role === 'pilot' || role === 'owner' || role === 'gym_owner') {
-          useAetherStore.getState().setMode('titan');
+        if (useAetherStore.getState().currentScreen === 'mode-selection' && !useAetherStore.getState().activeMode) {
+          const role = (session.user.user_metadata?.role || 'individual').toLowerCase();
+          if (role === 'individual') {
+            useAetherStore.getState().setMode('zenith');
+          } else if (role === 'pilot' || role === 'owner' || role === 'gym_owner') {
+            useAetherStore.getState().setMode('titan');
+          }
         }
       }
       
