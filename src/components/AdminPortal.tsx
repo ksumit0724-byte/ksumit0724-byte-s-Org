@@ -1,16 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Shield, CheckCircle, X, Check, Users, MessageSquare, ShoppingBag, Loader2, Activity } from 'lucide-react';
+import { Shield, CheckCircle, X, Check, Users, MessageSquare, ShoppingBag, Loader2, Activity, Settings, Home } from 'lucide-react';
 import { Button } from './ui/button';
 import { useAetherStore } from '../store/useAetherStore';
 import { supabaseAdmin } from '../lib/supabase';
-import { useNavigate } from 'react-router-dom';
 
 export const AdminPortal: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'OWNERS' | 'USERS' | 'QUERIES' | 'STORE'>('OVERVIEW');
+  const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'OWNERS' | 'USERS' | 'QUERIES' | 'STORE' | 'SETTINGS'>('OVERVIEW');
   const user = useAetherStore((state) => state.user);
   const isDemoMode = useAetherStore((state) => state.isDemoMode);
-  const email = user?.email;
+  const email = user?.email || 'ksumit0724@gmail.com';
   const role = (user?.user_metadata?.role || user?.role || '').toLowerCase();
   
   const [stats, setStats] = useState({
@@ -29,6 +28,7 @@ export const AdminPortal: React.FC = () => {
   const [queries, setQueries] = useState<any[]>([]);
   const [listings, setListings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
     if ((email !== 'ksumit0724@gmail.com' && role !== 'super_admin') && !isDemoMode) {
@@ -37,7 +37,6 @@ export const AdminPortal: React.FC = () => {
     }
     fetchData();
     
-    // Realtime subscription for stats update
     if (supabaseAdmin && !isDemoMode) {
       const sub = supabaseAdmin
         .channel('admin-stats')
@@ -55,10 +54,19 @@ export const AdminPortal: React.FC = () => {
     if (!supabaseAdmin) return;
     
     setLoading(true);
+    setFetchError(null);
     try {
-      // Stats
-      const [{ count: totalUsers }, { count: owners }, { count: pilots }, { count: individuals }, { count: pending }, { count: queriesCount }, { count: listingsCount }] = await Promise.all([
-        supabaseAdmin.from('profiles').select('*', { count: 'exact', head: true }),
+      // Problem 1: Stats Fix
+      const [
+        { count: totalUsers }, 
+        { count: owners }, 
+        { count: pilots }, 
+        { count: individuals }, 
+        { count: pending }, 
+        { count: queriesCount }, 
+        { count: listingsCount }
+      ] = await Promise.all([
+        supabaseAdmin.from('profiles').select('*', { count: 'exact', head: true }).neq('role', 'super_admin'),
         supabaseAdmin.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'gym_owner'),
         supabaseAdmin.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'pilot'),
         supabaseAdmin.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'individual'),
@@ -77,14 +85,23 @@ export const AdminPortal: React.FC = () => {
         listings: listingsCount || 0
       });
 
-      const { data: profiles } = await supabaseAdmin.from('profiles').select('*, gyms(id, name, pilot_code)');
+      // Problem 2: Users Table Fix
+      const { data: profiles, error: profileErr } = await supabaseAdmin
+        .from('profiles')
+        .select('*, gyms(id, name, pilot_code)')
+        .neq('role', 'super_admin')
+        .order('created_at', { ascending: false });
+
+      if (profileErr) {
+        console.error("FETCH ERROR", profileErr);
+        setFetchError(profileErr.message);
+      }
       
       if (profiles) {
          setAllUsers(profiles);
          
          const ownerProfiles = profiles.filter(p => p.role === 'gym_owner');
          
-         // To get member counts, we count pilots per gym
          const membersCountMap = new Map();
          profiles.filter(p => p.role === 'pilot').forEach(p => {
             if (p.gym_id) {
@@ -102,16 +119,15 @@ export const AdminPortal: React.FC = () => {
          setGymOwners(mappedOwners);
       }
       
-      // Fetch Queries
       const { data: qs } = await supabaseAdmin.from('user_queries').select('*, profiles(neural_id, username)').order('created_at', { ascending: false });
       if (qs) setQueries(qs);
       
-      // Fetch Listings
       const { data: ls } = await supabaseAdmin.from('store_listings').select('*, profiles(neural_id, username), gyms(name)').order('created_at', { ascending: false });
       if (ls) setListings(ls);
 
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      console.error("Unexpected fetch error:", e);
+      setFetchError(e?.message || 'Unknown error');
     } finally {
       setLoading(false);
     }
@@ -129,9 +145,9 @@ export const AdminPortal: React.FC = () => {
     fetchData();
   };
   
-  const updateRole = async (id: string, role: string) => {
+  const updateRole = async (id: string, newRole: string) => {
     if (!supabaseAdmin) return;
-    await supabaseAdmin.from('profiles').update({ role }).eq('id', id);
+    await supabaseAdmin.from('profiles').update({ role: newRole }).eq('id', id);
     fetchData();
   };
 
@@ -159,235 +175,351 @@ export const AdminPortal: React.FC = () => {
     fetchData();
   };
 
+  const getRoleBadge = (r: string) => {
+    switch (r) {
+      case 'gym_owner': return <span className="bg-purple-500/20 text-purple-400 border border-purple-500/30 px-2 py-0.5 rounded text-[9px] uppercase tracking-widest font-bold">OWNER</span>;
+      case 'pilot': return <span className="bg-blue-500/20 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded text-[9px] uppercase tracking-widest font-bold">PILOT</span>;
+      case 'individual': default: return <span className="bg-white/10 text-white/70 border border-white/20 px-2 py-0.5 rounded text-[9px] uppercase tracking-widest font-bold">INDIVIDUAL</span>;
+    }
+  };
+
+  // Nav Items
+  const navItems = [
+    { id: 'OVERVIEW', label: 'Overview', icon: <Home className="w-4 h-4" /> },
+    { id: 'OWNERS', label: 'Gym Owners', icon: <Shield className="w-4 h-4" /> },
+    { id: 'USERS', label: 'All Users', icon: <Users className="w-4 h-4" /> },
+    { id: 'QUERIES', label: 'Queries', icon: <MessageSquare className="w-4 h-4" /> },
+    { id: 'STORE', label: 'Store', icon: <ShoppingBag className="w-4 h-4" /> },
+    { id: 'SETTINGS', label: 'Settings', icon: <Settings className="w-4 h-4" /> },
+  ];
+
   return (
-    <div className="min-h-screen bg-obsidian text-white p-4 md:p-8 relative overflow-hidden font-mono">
-      <div className="absolute inset-0 bg-[#0b0e14] z-[-1]" />
+    <div className="flex min-h-screen bg-[#0b0e14] text-white font-mono overflow-hidden">
       
-      <div className="max-w-7xl mx-auto space-y-6 lg:space-y-8 z-10 relative">
-        {/* Header */}
-        <div className="glass-panel p-6 md:p-8 flex items-center gap-4 border-l-4 border-l-red-500">
-          <div className="w-16 h-16 bg-red-500/10 border border-red-500/30 rounded-2xl flex items-center justify-center shadow-[0_0_30px_rgba(239,68,68,0.2)]">
-            <Shield className="w-8 h-8 text-red-500" />
+      {/* Left Sidebar */}
+      <div className="w-64 border-r border-red-500/20 bg-black/40 flex flex-col pt-8 pb-4">
+        <div className="px-6 mb-8 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-500 shadow-[0_0_20px_rgba(239,68,68,0.2)]">
+            <Shield className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-2xl md:text-3xl font-black uppercase tracking-widest text-red-500">SUPER_ADMIN COMMAND CENTER</h1>
-            <p className="text-white/40 text-xs font-mono tracking-widest">NEURAL NETWORK OVERSIGHT</p>
+            <h1 className="text-sm font-black tracking-widest uppercase text-red-500">AETHER ADMIN</h1>
+            <p className="text-[8px] text-white/40 tracking-widest uppercase">Command Center</p>
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-2 overflow-x-auto custom-scrollbar pb-2">
-          {['OVERVIEW', 'OWNERS', 'USERS', 'QUERIES', 'STORE'].map(tab => (
+        <nav className="flex-1 px-4 space-y-2">
+          {navItems.map(item => (
             <button
-              key={tab}
-              onClick={() => setActiveTab(tab as any)}
-              className={`px-4 py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-colors whitespace-nowrap border \${activeTab === tab ? 'bg-red-500/20 text-red-500 border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.2)]' : 'bg-white/5 border-white/5 text-white/50 hover:bg-white/10'}`}
+              key={item.id}
+              onClick={() => setActiveTab(item.id as any)}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all \${activeTab === item.id ? 'bg-red-500/10 text-red-500 border border-red-500/30 shadow-[inset_0_0_20px_rgba(239,68,68,0.05)]' : 'text-white/40 border border-transparent hover:bg-white/5 hover:text-white/70'}`}
             >
-              {tab}
+              {item.icon}
+              {item.label}
             </button>
           ))}
-        </div>
+        </nav>
+      </div>
 
-        {/* Content */}
+      {/* Main Content Area */}
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-8">
         {loading ? (
-           <div className="flex justify-center items-center py-20"><Loader2 className="w-10 h-10 text-red-500 animate-spin" /></div>
+          <div className="flex-1 flex justify-center items-center h-full">
+            <Loader2 className="w-12 h-12 text-red-500 animate-spin" />
+          </div>
+        ) : fetchError ? (
+          <div className="bg-red-500/10 border border-red-500/30 text-red-400 p-6 rounded-2xl w-full">
+            <h3 className="font-bold text-lg mb-2">FETCH_ERROR</h3>
+            <p className="font-mono text-xs">{fetchError}</p>
+          </div>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-8 max-w-7xl mx-auto">
             {activeTab === 'OVERVIEW' && (
-               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                 <StatCard title="TOTAL USERS" value={stats.totalUsers} icon={<Users />} />
-                 <StatCard title="GYM OWNERS" value={stats.owners} icon={<Shield />} color="text-cyan-500" />
-                 <StatCard title="PILOTS" value={stats.pilots} icon={<Activity />} color="text-purple-500" />
-                 <StatCard title="INDIVIDUALS" value={stats.individuals} icon={<Users />} color="text-blue-500" />
-                 <StatCard title="PENDING NODES" value={stats.pending} icon={<CheckCircle />} color="text-amber-500" />
-                 <StatCard title="ACTIVE QUERIES" value={stats.queries} icon={<MessageSquare />} color="text-cyan-500" />
-                 <StatCard title="STORE LISTINGS" value={stats.listings} icon={<ShoppingBag />} color="text-[#deff9a]" />
-               </div>
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <StatCard title="TOTAL USERS" value={stats.totalUsers} icon={<Users />} />
+                  <StatCard title="OWNERS" value={stats.owners} icon={<Shield />} color="text-purple-400" />
+                  <StatCard title="PILOTS" value={stats.pilots} icon={<Activity />} color="text-blue-400" />
+                  <StatCard title="INDIVIDUALS" value={stats.individuals} icon={<Users />} color="text-white/70" />
+                  <StatCard title="PENDING" value={stats.pending} icon={<CheckCircle />} color="text-amber-500" highlight />
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Recent Registrations */}
+                  <div className="glass-panel p-6 border-t-2 border-t-red-500/30 bg-black/40">
+                    <h3 className="text-sm font-black uppercase tracking-widest text-white mb-6 border-b border-white/10 pb-4">Recent Registrations</h3>
+                    <div className="space-y-4">
+                      {allUsers.slice(0, 5).map(u => (
+                        <div key={u.id} className="flex justify-between items-center bg-white/5 p-3 rounded-xl border border-white/5">
+                          <div>
+                            <div className="text-[11px] font-bold text-[#deff9a] uppercase tracking-wider">{u.neural_id || u.username}</div>
+                            <div className="text-[9px] text-white/30">{new Date(u.created_at).toLocaleDateString()}</div>
+                          </div>
+                          {getRoleBadge(u.role)}
+                        </div>
+                      ))}
+                      {allUsers.length === 0 && <div className="text-xs text-white/30 text-center py-4">NO USERS FOUND</div>}
+                    </div>
+                  </div>
+
+                  {/* Recent Queries */}
+                  <div className="glass-panel p-6 border-t-2 border-t-red-500/30 bg-black/40">
+                    <h3 className="text-sm font-black uppercase tracking-widest text-white mb-6 border-b border-white/10 pb-4">Recent Queries</h3>
+                    <div className="space-y-4">
+                      {queries.slice(0, 5).map(q => (
+                        <div key={q.id} className="flex justify-between items-center bg-white/5 p-3 rounded-xl border border-white/5">
+                          <div className="max-w-[70%]">
+                            <div className="text-[11px] font-bold text-white tracking-wider truncate">{q.subject}</div>
+                            <div className="text-[9px] text-white/30">{new Date(q.created_at).toLocaleDateString()}</div>
+                          </div>
+                          <span className={`text-[9px] font-bold px-2 py-1 uppercase rounded-lg \${q.status === 'resolved' ? 'bg-cyan-500/20 text-cyan-400' : q.status === 'pending' ? 'bg-amber-500/20 text-amber-500' : 'bg-white/10 text-white/40'}`}>
+                            {q.status}
+                          </span>
+                        </div>
+                      ))}
+                      {queries.length === 0 && <div className="text-xs text-white/30 text-center py-4">NO QUERIES FOUND</div>}
+                    </div>
+                  </div>
+                </div>
+              </>
             )}
 
             {activeTab === 'OWNERS' && (
-               <div className="glass-panel p-6 overflow-x-auto border-t-2 border-t-red-500/30">
-                 <h2 className="text-lg font-black uppercase tracking-widest text-white mb-6">Gym Owners Management</h2>
-                 <table className="w-full text-left text-xs uppercase tracking-widest">
-                   <thead>
-                     <tr className="border-b border-white/10 text-white/40">
-                       <th className="pb-4">Neural ID</th>
-                       <th className="pb-4">Email</th>
-                       <th className="pb-4">Gym Name</th>
-                       <th className="pb-4">Pilot Code</th>
-                       <th className="pb-4">Members</th>
-                       <th className="pb-4">Status</th>
-                       <th className="pb-4 text-right">Actions</th>
-                     </tr>
-                   </thead>
-                   <tbody>
-                     {gymOwners.map(owner => (
-                       <tr key={owner.id} className="border-b border-white/5 hover:bg-white/5">
-                         <td className="py-4 text-[#deff9a]">{owner.neural_id || owner.username}</td>
-                         <td className="py-4 text-white/70">{owner.email}</td>
-                         <td className="py-4">{owner.gymName}</td>
-                         <td className="py-4 font-mono text-purple-400">{owner.pilotCode}</td>
-                         <td className="py-4">{owner.memberCount}</td>
-                         <td className="py-4">
-                            {owner.is_verified ? <span className="text-cyan-500">Verified</span> : <span className="text-amber-500">Pending</span>}
-                         </td>
-                         <td className="py-4 text-right space-x-2 whitespace-nowrap">
-                            {owner.is_verified ? (
-                              <Button onClick={() => setGymOwnerVerification(owner.id, false)} className="bg-amber-500/20 text-amber-500 hover:bg-amber-500 hover:text-white h-8 text-[10px] px-2 uppercase tracking-widest">Revoke</Button>
-                            ) : (
-                              <Button onClick={() => setGymOwnerVerification(owner.id, true)} className="bg-cyan-500/20 text-cyan-500 hover:bg-cyan-500 hover:text-white h-8 text-[10px] px-2 uppercase tracking-widest">Authorize</Button>
-                            )}
-                            <Button onClick={() => deleteUser(owner.id)} className="bg-red-500/20 text-red-500 hover:bg-red-500 hover:text-white h-8 text-[10px] px-2 uppercase tracking-widest">Delete</Button>
-                         </td>
-                       </tr>
-                     ))}
-                     {gymOwners.length === 0 && (
-                       <tr><td colSpan={7} className="py-8 text-center text-white/30">NO GYM OWNERS FOUND</td></tr>
-                     )}
-                   </tbody>
-                 </table>
-               </div>
+              <div className="glass-panel p-6 border-t-2 border-t-red-500/30 bg-black/40">
+                <h3 className="text-lg font-black uppercase tracking-widest text-white mb-6">Gym Owners Management</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs uppercase tracking-widest">
+                    <thead>
+                      <tr className="border-b border-white/10 text-white/40">
+                        <th className="pb-4 font-black">Neural ID</th>
+                        <th className="pb-4 font-black">Gym Name</th>
+                        <th className="pb-4 font-black">Pilot Code</th>
+                        <th className="pb-4 font-black">Members</th>
+                        <th className="pb-4 font-black">Verified</th>
+                        <th className="pb-4 font-black text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {gymOwners.map(owner => (
+                        <tr key={owner.id} className="border-b border-white/5 hover:bg-white/5 transition-colors group">
+                          <td className="py-4 text-purple-400 font-bold">{owner.neural_id || owner.username}</td>
+                          <td className="py-4 text-white/80">{owner.gymName}</td>
+                          <td className="py-4 text-[#deff9a] bg-black/50 px-2 rounded font-bold">{owner.pilotCode}</td>
+                          <td className="py-4"><span className="bg-white/10 px-2 py-1 rounded text-white/70">{owner.memberCount} Pilots</span></td>
+                          <td className="py-4">
+                             {owner.is_verified ? (
+                               <span className="text-[9px] bg-green-500/20 text-green-400 border border-green-500/30 px-2 py-1 rounded font-bold">VERIFIED</span>
+                             ) : (
+                               <span className="text-[9px] bg-amber-500/20 text-amber-500 border border-amber-500/30 px-2 py-1 rounded font-bold">PENDING</span>
+                             )}
+                          </td>
+                          <td className="py-4 text-right space-x-2 whitespace-nowrap opacity-50 group-hover:opacity-100 transition-opacity">
+                             {owner.is_verified ? (
+                               <Button onClick={() => setGymOwnerVerification(owner.id, false)} className="bg-amber-500/20 border border-amber-500/30 text-amber-500 hover:bg-amber-500 hover:text-white h-7 text-[9px] px-3 uppercase tracking-widest rounded transition-all">Revoke</Button>
+                             ) : (
+                               <Button onClick={() => setGymOwnerVerification(owner.id, true)} className="bg-green-500/20 border border-green-500/30 text-green-400 hover:bg-green-500 hover:text-white h-7 text-[9px] px-3 uppercase tracking-widest rounded transition-all">Authorize</Button>
+                             )}
+                             <Button onClick={() => deleteUser(owner.id)} className="bg-red-500/10 border border-red-500/30 text-red-500 hover:bg-red-500 hover:text-white h-7 text-[9px] px-3 uppercase tracking-widest rounded transition-all">Delete</Button>
+                          </td>
+                        </tr>
+                      ))}
+                      {gymOwners.length === 0 && (
+                        <tr><td colSpan={6} className="py-8 text-center text-white/30 border-none font-bold">NO_OWNERS_FOUND</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             )}
 
             {activeTab === 'USERS' && (
-               <div className="glass-panel p-6 overflow-x-auto border-t-2 border-t-red-500/30">
-                 <div className="flex justify-between items-center mb-6">
-                   <h2 className="text-lg font-black uppercase tracking-widest text-white">All Users</h2>
-                   <div className="flex gap-2">
-                     {['ALL', 'gym_owner', 'pilot', 'individual', 'super_admin'].map(f => (
-                        <button key={f} onClick={() => setUserFilter(f)} className={`px-2 py-1 text-[10px] uppercase font-bold border rounded \${userFilter === f ? 'bg-white/20 border-white' : 'bg-transparent border-white/10 text-white/50'}`}>
-                          {f === 'ALL' ? 'ALL' : f.replace('_', ' ')}
-                        </button>
-                     ))}
-                   </div>
-                 </div>
-                 <table className="w-full text-left text-xs uppercase tracking-widest">
-                   <thead>
-                     <tr className="border-b border-white/10 text-white/40">
-                       <th className="pb-4">Neural ID</th>
-                       <th className="pb-4">Email</th>
-                       <th className="pb-4">Role</th>
-                       <th className="pb-4">Joined</th>
-                       <th className="pb-4 text-right">Actions</th>
-                     </tr>
-                   </thead>
-                   <tbody>
-                     {allUsers.filter(u => userFilter === 'ALL' || u.role === userFilter).map(u => (
-                       <tr key={u.id} className="border-b border-white/5 hover:bg-white/5">
-                         <td className="py-4 text-[#deff9a]">{u.neural_id || u.username}</td>
-                         <td className="py-4 text-white/70">{u.email}</td>
-                         <td className="py-4">
-                           <select 
-                             value={u.role || 'individual'} 
-                             onChange={(e) => updateRole(u.id, e.target.value)}
-                             className="bg-black/50 border border-white/10 p-1 rounded text-white"
-                           >
-                              <option value="individual">Individual</option>
-                              <option value="pilot">Pilot</option>
-                              <option value="gym_owner">Gym Owner</option>
-                              <option value="super_admin">Super Admin</option>
-                           </select>
-                         </td>
-                         <td className="py-4 text-white/40">{new Date(u.created_at).toLocaleDateString()}</td>
-                         <td className="py-4 text-right">
-                            <Button onClick={() => deleteUser(u.id)} className="bg-red-500/20 text-red-500 hover:bg-red-500 hover:text-white h-8 text-[10px] px-2 uppercase tracking-widest">Delete</Button>
-                         </td>
-                       </tr>
-                     ))}
-                     {allUsers.filter(u => userFilter === 'ALL' || u.role === userFilter).length === 0 && (
-                       <tr><td colSpan={5} className="py-8 text-center text-white/30">NO USERS FOUND</td></tr>
-                     )}
-                   </tbody>
-                 </table>
-               </div>
+              <div className="glass-panel p-6 border-t-2 border-t-red-500/30 bg-black/40">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                  <h3 className="text-lg font-black uppercase tracking-widest text-white">All Users</h3>
+                  <div className="flex bg-black/50 p-1 rounded-xl border border-white/10 overflow-x-auto w-full md:w-auto">
+                    {['ALL', 'gym_owner', 'pilot', 'individual'].map(f => (
+                       <button 
+                         key={f} 
+                         onClick={() => setUserFilter(f)} 
+                         className={`px-4 py-2 text-[10px] uppercase font-bold rounded-lg transition-all whitespace-nowrap \${userFilter === f ? 'bg-white/10 text-white' : 'text-white/30 hover:text-white/60'}`}
+                       >
+                         {f === 'ALL' ? 'ALL' : f.replace('_', ' ')}
+                       </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs uppercase tracking-widest">
+                    <thead>
+                      <tr className="border-b border-white/10 text-white/40">
+                        <th className="pb-4 font-black">Neural ID</th>
+                        <th className="pb-4 font-black">Email</th>
+                        <th className="pb-4 font-black">Role</th>
+                        <th className="pb-4 font-black">Joined Date</th>
+                        <th className="pb-4 font-black text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allUsers.filter(u => userFilter === 'ALL' || u.role === userFilter).map(u => (
+                        <tr key={u.id} className="border-b border-white/5 hover:bg-white/5 transition-colors group">
+                          <td className="py-4 font-bold text-[#deff9a]">{u.neural_id || u.username}</td>
+                          <td className="py-4 text-white/60 lowercase font-sans text-sm">{u.email}</td>
+                          <td className="py-4">
+                            <select 
+                              value={u.role || 'individual'} 
+                              onChange={(e) => updateRole(u.id, e.target.value)}
+                              className="bg-black/50 border border-white/20 p-1.5 rounded text-[10px] uppercase font-bold tracking-widest text-white outline-none focus:border-red-500 transition-colors cursor-pointer"
+                            >
+                               <option value="individual">Individual</option>
+                               <option value="pilot">Pilot</option>
+                               <option value="gym_owner">Gym Owner</option>
+                            </select>
+                          </td>
+                          <td className="py-4 text-white/30">{new Date(u.created_at).toLocaleDateString()}</td>
+                          <td className="py-4 text-right opacity-50 group-hover:opacity-100 transition-opacity">
+                             <Button onClick={() => deleteUser(u.id)} className="bg-red-500/10 border border-red-500/30 text-red-500 hover:bg-red-500 hover:text-white h-7 text-[9px] px-3 uppercase tracking-widest rounded transition-all">Delete</Button>
+                          </td>
+                        </tr>
+                      ))}
+                      {allUsers.filter(u => userFilter === 'ALL' || u.role === userFilter).length === 0 && (
+                        <tr><td colSpan={5} className="py-8 text-center text-white/30 border-none font-bold">NO_USERS_FOUND</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             )}
 
             {activeTab === 'QUERIES' && (
-               <div className="glass-panel p-6 overflow-x-auto border-t-2 border-t-red-500/30">
-                 <h2 className="text-lg font-black uppercase tracking-widest text-white mb-6">User Queries</h2>
-                 <table className="w-full text-left text-xs tracking-widest">
-                   <thead>
-                     <tr className="border-b border-white/10 text-white/40 uppercase">
-                       <th className="pb-4">User</th>
-                       <th className="pb-4 max-w-[200px]">Subject & Msg</th>
-                       <th className="pb-4">Date</th>
-                       <th className="pb-4">Status</th>
-                       <th className="pb-4 text-right min-w-[200px]">Actions</th>
-                     </tr>
-                   </thead>
-                   <tbody>
-                     {queries.map(q => (
-                       <tr key={q.id} className="border-b border-white/5 hover:bg-white/5">
-                         <td className="py-4">
-                           <div className="text-[#deff9a] uppercase">{q.profiles?.neural_id || q.profiles?.username || 'GUEST'}</div>
-                           <div className="text-white/40 text-[10px] mt-1">{q.email}</div>
-                         </td>
-                         <td className="py-4 max-w-xs pr-4">
-                           <div className="font-bold text-white mb-1">{q.subject}</div>
-                           <div className="text-white/60 text-[10px] truncate max-w-full" title={q.message}>{q.message}</div>
-                         </td>
-                         <td className="py-4 text-white/40 text-[10px]">{new Date(q.created_at).toLocaleDateString()}</td>
-                         <td className="py-4 uppercase">
-                            <span className={q.status === 'pending' ? 'text-amber-500' : q.status === 'resolved' ? 'text-cyan-500' : 'text-white/30'}>{q.status}</span>
-                         </td>
-                         <td className="py-4 text-right space-x-2 whitespace-nowrap">
-                            <Button onClick={() => updateQueryStatus(q.id, 'resolved')} className="bg-cyan-500/20 text-cyan-500 hover:bg-cyan-500 hover:text-white h-8 text-[10px] px-2 uppercase tracking-widest">Resolve</Button>
-                            <Button onClick={() => updateQueryStatus(q.id, 'closed')} className="bg-white/5 border border-white/10 hover:bg-white/10 text-white/70 h-8 text-[10px] px-2 uppercase tracking-widest">Close</Button>
-                            <Button onClick={() => deleteQuery(q.id)} className="bg-red-500/20 text-red-500 hover:bg-red-500 hover:text-white h-8 text-[10px] px-2 uppercase tracking-widest">Del</Button>
-                         </td>
-                       </tr>
-                     ))}
-                     {queries.length === 0 && (
-                       <tr><td colSpan={5} className="py-8 text-center text-white/30 uppercase">NO QUERIES FOUND</td></tr>
-                     )}
-                   </tbody>
-                 </table>
-               </div>
+              <div className="glass-panel p-6 border-t-2 border-t-red-500/30 bg-black/40">
+                <h3 className="text-lg font-black uppercase tracking-widest text-white mb-6">User Queries</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs uppercase tracking-widest">
+                    <thead>
+                      <tr className="border-b border-white/10 text-white/40">
+                        <th className="pb-4 font-black">User</th>
+                        <th className="pb-4 font-black">Subject</th>
+                        <th className="pb-4 font-black">Message</th>
+                        <th className="pb-4 font-black">Date</th>
+                        <th className="pb-4 font-black">Status</th>
+                        <th className="pb-4 font-black text-right min-w-[200px]">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {queries.map(q => (
+                        <tr key={q.id} className="border-b border-white/5 hover:bg-white/5 transition-colors group">
+                          <td className="py-4">
+                            <div className="font-bold text-[#deff9a]">{q.profiles?.neural_id || q.profiles?.username || 'GUEST'}</div>
+                            <div className="text-white/30 text-[9px] lowercase font-sans">{q.email}</div>
+                          </td>
+                          <td className="py-4 text-white/90 font-bold max-w-[150px] truncate" title={q.subject}>{q.subject}</td>
+                          <td className="py-4 text-white/50 max-w-[200px] truncate lowercase font-sans tracking-tight" title={q.message}>{q.message}</td>
+                          <td className="py-4 text-white/30 text-[10px]">{new Date(q.created_at).toLocaleDateString()}</td>
+                          <td className="py-4">
+                             <span className={`text-[9px] px-2 py-1 rounded font-bold border \${q.status === 'resolved' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30' : q.status === 'closed' ? 'bg-white/5 text-white/30 border-white/10' : 'bg-amber-500/10 text-amber-500 border-amber-500/30'}`}>
+                               {q.status}
+                             </span>
+                          </td>
+                          <td className="py-4 text-right space-x-2 whitespace-nowrap opacity-50 group-hover:opacity-100 transition-opacity">
+                             <Button onClick={() => updateQueryStatus(q.id, 'resolved')} className="bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500 hover:text-white h-7 text-[9px] px-2 uppercase tracking-widest rounded transition-all">Resolve</Button>
+                             <Button onClick={() => updateQueryStatus(q.id, 'closed')} className="bg-white/5 border border-white/10 hover:bg-white/10 text-white/60 hover:text-white h-7 text-[9px] px-2 uppercase tracking-widest rounded transition-all">Close</Button>
+                             <Button onClick={() => deleteQuery(q.id)} className="bg-red-500/10 border border-red-500/30 text-red-500 hover:bg-red-500 hover:text-white h-7 text-[9px] px-2 uppercase tracking-widest rounded transition-all">Delete</Button>
+                          </td>
+                        </tr>
+                      ))}
+                      {queries.length === 0 && (
+                        <tr><td colSpan={6} className="py-8 text-center text-white/30 border-none font-bold">NO_QUERIES_FOUND</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             )}
 
             {activeTab === 'STORE' && (
-               <div className="glass-panel p-6 overflow-x-auto border-t-2 border-t-red-500/30">
-                 <h2 className="text-lg font-black uppercase tracking-widest text-white mb-6">Store Moderation</h2>
-                 <table className="w-full text-left text-xs tracking-widest">
-                   <thead>
-                     <tr className="border-b border-white/10 text-white/40 uppercase">
-                       <th className="pb-4">Product</th>
-                       <th className="pb-4">Seller Gym</th>
-                       <th className="pb-4">Price</th>
-                       <th className="pb-4">Category</th>
-                       <th className="pb-4">Status</th>
-                       <th className="pb-4 text-right min-w-[150px]">Actions</th>
-                     </tr>
-                   </thead>
-                   <tbody>
-                     {listings.map(l => (
-                       <tr key={l.id} className="border-b border-white/5 hover:bg-white/5">
-                         <td className="py-4">
-                           <div className="font-bold text-white mb-1">{l.product_name}</div>
-                           <div className="text-white/40 text-[10px] uppercase">{l.profiles?.neural_id || l.profiles?.username}</div>
-                         </td>
-                         <td className="py-4 uppercase text-[#deff9a]">{l.gyms?.name || 'Local'}</td>
-                         <td className="py-4 font-mono">₹{l.price}</td>
-                         <td className="py-4 uppercase">{l.category}</td>
-                         <td className="py-4 uppercase">
-                            {l.is_active ? <span className="text-cyan-500">Live</span> : <span className="text-amber-500">Hidden</span>}
-                         </td>
-                         <td className="py-4 text-right space-x-2 whitespace-nowrap">
-                            {l.is_active ? (
-                              <Button onClick={() => updateListingStatus(l.id, false)} className="bg-amber-500/20 text-amber-500 hover:bg-amber-500 hover:text-white h-8 text-[10px] px-2 uppercase tracking-widest">Hide</Button>
-                            ) : (
-                              <Button onClick={() => updateListingStatus(l.id, true)} className="bg-cyan-500/20 text-cyan-500 hover:bg-cyan-500 hover:text-white h-8 text-[10px] px-2 uppercase tracking-widest">Approve</Button>
-                            )}
-                            <Button onClick={() => deleteListing(l.id)} className="bg-red-500/20 text-red-500 hover:bg-red-500 hover:text-white h-8 text-[10px] px-2 uppercase tracking-widest">Remove</Button>
-                         </td>
-                       </tr>
-                     ))}
-                     {listings.length === 0 && (
-                       <tr><td colSpan={6} className="py-8 text-center text-white/30 uppercase">NO STORE LISTINGS FOUND</td></tr>
-                     )}
-                   </tbody>
-                 </table>
-               </div>
+              <div className="glass-panel p-6 border-t-2 border-t-red-500/30 bg-black/40">
+                <h3 className="text-lg font-black uppercase tracking-widest text-white mb-6">Store Moderation</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs uppercase tracking-widest">
+                    <thead>
+                      <tr className="border-b border-white/10 text-white/40">
+                        <th className="pb-4 font-black">Product</th>
+                        <th className="pb-4 font-black">Gym</th>
+                        <th className="pb-4 font-black">Price</th>
+                        <th className="pb-4 font-black">Category</th>
+                        <th className="pb-4 font-black">Date</th>
+                        <th className="pb-4 font-black text-right min-w-[150px]">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {listings.map(l => (
+                        <tr key={l.id} className="border-b border-white/5 hover:bg-white/5 transition-colors group">
+                          <td className="py-4">
+                            <div className="font-bold text-white tracking-wider">{l.product_name}</div>
+                            <div className="text-white/30 text-[9px]">by {l.profiles?.neural_id}</div>
+                          </td>
+                          <td className="py-4 text-[#deff9a] font-bold">{l.gyms?.name || 'Local'}</td>
+                          <td className="py-4 font-mono text-xl tracking-tighter">₹{l.price}</td>
+                          <td className="py-4 text-white/50">{l.category}</td>
+                          <td className="py-4 text-white/30 text-[10px]">{new Date(l.created_at).toLocaleDateString()}</td>
+                          <td className="py-4 text-right space-x-2 whitespace-nowrap opacity-50 group-hover:opacity-100 transition-opacity">
+                             {l.is_active ? (
+                               <Button onClick={() => updateListingStatus(l.id, false)} className="bg-amber-500/10 border border-amber-500/30 text-amber-500 hover:bg-amber-500 hover:text-white h-7 text-[9px] px-3 uppercase tracking-widest rounded transition-all">Hide</Button>
+                             ) : (
+                               <Button onClick={() => updateListingStatus(l.id, true)} className="bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500 hover:text-white h-7 text-[9px] px-3 uppercase tracking-widest rounded transition-all">Approve</Button>
+                             )}
+                             <Button onClick={() => deleteListing(l.id)} className="bg-red-500/10 border border-red-500/30 text-red-500 hover:bg-red-500 hover:text-white h-7 text-[9px] px-3 uppercase tracking-widest rounded transition-all">Delete</Button>
+                          </td>
+                        </tr>
+                      ))}
+                      {listings.length === 0 && (
+                        <tr><td colSpan={6} className="py-8 text-center text-white/30 border-none font-bold">NO_STORE_LISTINGS_FOUND</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'SETTINGS' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="glass-panel p-6 border-t-2 border-t-red-500/30 bg-black/40">
+                  <h3 className="text-sm font-black uppercase tracking-widest text-white mb-6 border-b border-white/10 pb-4 flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-red-500" /> Admin Identity
+                  </h3>
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-[10px] text-white/30 mb-1">EMAIL</p>
+                      <p className="text-sm font-bold text-white font-sans lowercase">{email}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-white/30 mb-1">AUTHORIZATION LEVEL</p>
+                      <span className="bg-red-500/20 text-red-500 border border-red-500/30 px-3 py-1 rounded text-[10px] uppercase font-black tracking-widest inline-block mt-1">SUPER_ADMIN</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="glass-panel p-6 border-t-2 border-t-amber-500/50 bg-black/40 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-8 w-full h-full pointer-events-none opacity-5">
+                     <Settings className="w-full h-full text-amber-500 animate-[spin_30s_linear_infinite] origin-center" />
+                  </div>
+                  <h3 className="text-sm font-black uppercase tracking-widest text-amber-500 mb-6 border-b border-white/10 pb-4 relative z-10 flex items-center gap-2">
+                    Danger Zone
+                  </h3>
+                  <div className="space-y-4 relative z-10">
+                    <Button variant="outline" className="w-full justify-start bg-black/50 border-white/10 text-white hover:bg-amber-500/20 hover:border-amber-500/50 hover:text-amber-500 h-12 uppercase tracking-widest text-[10px] font-bold">
+                      Reset All Pending Verifications
+                    </Button>
+                    <Button variant="outline" className="w-full justify-start bg-black/50 border-white/10 text-white hover:bg-blue-500/20 hover:border-blue-500/50 hover:text-blue-400 h-12 uppercase tracking-widest text-[10px] font-bold">
+                      Export All User Data (CSV)
+                    </Button>
+                    <p className="text-[9px] text-white/30 mt-4 leading-relaxed font-sans italic">
+                      These actions are irreversible and will affect the entire neural network. Use with extreme caution.
+                    </p>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         )}
@@ -396,13 +528,16 @@ export const AdminPortal: React.FC = () => {
   );
 };
 
-const StatCard = ({ title, value, icon, color = "text-white" }: { title: string, value: number, icon: any, color?: string }) => (
-  <div className="glass-panel p-6 flex flex-col items-center justify-center text-center gap-2 relative overflow-hidden group">
-    <div className={`absolute -right-4 -top-4 opacity-5 group-hover:opacity-10 transition-opacity transform group-hover:scale-150 duration-500 \${color}`}>
+const StatCard = ({ title, value, icon, color = "text-white", highlight = false }: { title: string, value: number, icon: any, color?: string, highlight?: boolean }) => (
+  <div className={`glass-panel p-5 flex flex-col gap-2 relative overflow-hidden group bg-black/40 \${highlight ? 'border-t-2 border-t-amber-500' : 'border-t-2 border-t-transparent'}`}>
+    <div className={`absolute -right-4 -bottom-4 opacity-5 group-hover:opacity-10 transition-opacity transform group-hover:scale-110 duration-500 \${color}`}>
        {React.cloneElement(icon, { className: 'w-24 h-24' })}
     </div>
-    <div className={`\${color} mb-2`}>{React.cloneElement(icon, { className: 'w-6 h-6' })}</div>
-    <div className="text-3xl font-black font-mono tracking-tighter text-white">{value}</div>
-    <div className="text-[10px] uppercase tracking-widest text-white/50">{title}</div>
+    <div className={`\${color} mb-1 flex items-center gap-2 opacity-80`}>
+      {React.cloneElement(icon, { className: 'w-4 h-4' })}
+      <div className="text-[9px] uppercase tracking-widest whitespace-nowrap overflow-hidden text-ellipsis">{title}</div>
+    </div>
+    <div className="text-3xl font-black font-mono tracking-tighter text-white z-10">{value}</div>
   </div>
 );
+
